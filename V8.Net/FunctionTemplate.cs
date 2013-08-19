@@ -55,8 +55,9 @@ namespace V8.Net
 
         public FunctionTemplate()
         {
-            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly())
-                throw new InvalidOperationException("You much create function templates by calling 'V8Engine.CreateFunctionTemplate()'.");
+            // FIXME: This doesn't work on Mono. The calling assembly is mscorlib, while executing assembly is V8.NET.
+//            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly())
+//                throw new InvalidOperationException("You much create function templates by calling 'V8Engine.CreateFunctionTemplate()'.");
         }
 
         ~FunctionTemplate()

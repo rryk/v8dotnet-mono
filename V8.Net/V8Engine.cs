@@ -467,8 +467,11 @@ namespace V8.Net
 
             itemsEnum.Reset();
 
+            // When this code was written V8, .NET and Mono all used two-byte characters. Therefore, there is no
+            // conversion in the code below. However, should this change in the future, the code needs to be updated.
+
             int strPtrBufSize = Marshal.SizeOf(typeof(IntPtr)) * itemsCount; // start buffer size with size needed for all string pointers.
-            char** oneBigStringBlock = (char**)Utilities.AllocNativeMemory(strPtrBufSize + Marshal.SystemDefaultCharSize * strBufSize);
+            char** oneBigStringBlock = (char**)Utilities.AllocNativeMemory(strPtrBufSize + sizeof(char) * strBufSize);
             char** ptrWritePtr = oneBigStringBlock;
             char* strWritePtr = (char*)(((byte*)oneBigStringBlock) + strPtrBufSize);
             int itemLength;

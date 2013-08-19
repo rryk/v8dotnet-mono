@@ -181,7 +181,10 @@ int HandleProxy::GetManagedObjectID()
         {
             auto field = obj->GetInternalField(1); // (may be faster than hidden values)
             if (field->IsExternal())
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-fpermissive"
                 _ManagedObjectID = (int32_t)field.As<External>()->Value();
+#pragma GCC diagnostic pop
         }
         else
         {

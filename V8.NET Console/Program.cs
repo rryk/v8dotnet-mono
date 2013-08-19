@@ -495,7 +495,8 @@ public class V8DotNetTester : V8ManagedObject
         Engine.ConsoleExecute("assert('Testing obj1[1]', obj1[1], 100.2)", this.GetType().Name, true);
         Engine.ConsoleExecute("assert('Testing obj1[2]', obj1[2], '300')", this.GetType().Name, true);
         Engine.ConsoleExecute("assert('Testing obj1[3] is undefined?', obj1[3] === undefined, true)", this.GetType().Name, true);
-        Engine.ConsoleExecute("assert('Testing obj1[4]', obj1[4].toString(), 'Wed Jan 02 2013 03:04:05 GMT-0500 (Eastern Standard Time)')", this.GetType().Name, true);
+        // FIXME: This may fail depending on the timezone of the machine it is executed upon.
+        //Engine.ConsoleExecute("assert('Testing obj1[4]', obj1[4].toString(), 'Wed Jan 02 2013 03:04:05 GMT-0500 (Eastern Standard Time)')", this.GetType().Name, true);
 
         Console.WriteLine("\r\nPress any key to test handle reuse ...");
         Console.WriteLine("(1000 native object handles will be created, but one V8NativeObject wrapper will be used)");

@@ -1,5 +1,19 @@
 #include "ProxyTypes.h"
 
+namespace {
+  // An exception type that is similar to Microsoft's std::exception, which allows to pass a custom message into
+  // constructor.
+  class v8net_exception : public std::exception {
+    public:
+	  v8net_exception() throw() : std::exception(), message(0) {}
+	  v8net_exception(const char* aMessage) throw() : std::exception(), message(aMessage) {}
+      virtual ~v8net_exception() throw() {}
+      virtual const char* what() const throw() { return message; }
+    private:
+      const char* message;
+  };
+}
+
 // ############################################################################################################################
 // Misc. Global Functions
 
@@ -138,7 +152,10 @@ extern "C"
             {
                 if (templateProxy != nullptr)
                     obj->SetAlignedPointerInInternalField(0, templateProxy); // (stored a reference to the proxy instance for the call-back function(s))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
                 obj->SetInternalField(1, External::New((void*)managedObjectID));
+#pragma GCC diagnostic pop
             }
             obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID)); // (won't be used on template created objects [fields are faster], but done anyhow for consistency)
         }
@@ -149,7 +166,7 @@ extern "C"
     {
         auto handle = handleProxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         return handleProxy->EngineProxy()->GetHandleProxy(handle.As<Object>()->GetPrototype());
     }
 
@@ -159,7 +176,7 @@ extern "C"
 
         auto hThis = _this->Handle();
         if (hThis.IsEmpty() || !hThis->IsObject())
-            throw exception("Call: The target instance handle ('this') does not represent an object.");
+            throw v8net_exception("Call: The target instance handle ('this') does not represent an object.");
 
         auto hSubject = subject->Handle();
         Handle<Function> hFunc;
@@ -167,17 +184,17 @@ extern "C"
         if (functionName != nullptr) // (if no name is given, assume the subject IS a function object, otherwise get the property as a function)
         {
             if (hSubject.IsEmpty() || !hSubject->IsObject())
-                throw exception("Call: The subject handle does not represent an object.");
+                throw v8net_exception("Call: The subject handle does not represent an object.");
 
             auto hProp = hSubject.As<Object>()->Get(String::New(functionName));
 
             if (hProp.IsEmpty() || !hProp->IsFunction())
-                throw exception("Call: The specified property does not represent a function.");
+                throw v8net_exception("Call: The specified property does not represent a function.");
 
             hFunc = hProp.As<Function>();
         }
         else if (hSubject.IsEmpty() || !hSubject->IsFunction())
-            throw exception("Call: The subject handle does not represent a function.");
+            throw v8net_exception("Call: The subject handle does not represent a function.");
         else
             hFunc = hSubject.As<Function>();
 
@@ -202,9 +219,9 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
-        Handle<Value> valueHandle = value != nullptr ? value->Handle() : v8::Undefined();
+        Handle<Value> valueHandle = value != nullptr ? value->Handle() : v8::Undefined().As<Value>();
         return obj->Set(String::New(name), valueHandle, attribs);
     }
 
@@ -212,9 +229,9 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
-        Handle<Value> valueHandle = value != nullptr ? value->Handle() : v8::Undefined();
+        Handle<Value> valueHandle = value != nullptr ? value->Handle() : v8::Undefined().As<Value>();
         return obj->Set(index,  valueHandle);
     }
 
@@ -222,7 +239,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         return proxy->EngineProxy()->GetHandleProxy(obj->Get(String::New(name)));
     }
@@ -231,7 +248,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         return proxy->EngineProxy()->GetHandleProxy(obj->Get(index));
     }
@@ -240,7 +257,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         return obj->Delete(String::New(name));
     }
@@ -249,7 +266,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         return obj->Delete(index);
     }
@@ -260,12 +277,12 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID));
         //??obj->SetHiddenValue(String::New("_HandleProxy_"), External::New(proxy));
-        obj->SetHiddenValue(String::New("_Getter_"), External::New(getter));
-        obj->SetHiddenValue(String::New("_Setter_"), External::New(setter));
+        obj->SetHiddenValue(String::New("_Getter_"), External::New((void*)getter));
+        obj->SetHiddenValue(String::New("_Setter_"), External::New((void*)setter));
         obj->SetAccessor(String::New(name), _GetObjectProperty, _SetObjectProperty, v8::Null(), access, attributes);  // TODO: Check how this affects objects created from templates!
     }
 
@@ -273,7 +290,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         auto names = obj->GetPropertyNames();
         return proxy->EngineProxy()->GetHandleProxy(names);
@@ -283,7 +300,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         auto names = obj->GetOwnPropertyNames();
         return proxy->EngineProxy()->GetHandleProxy(names);
@@ -293,7 +310,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsObject())
-            throw exception("The handle does not represent an object.");
+            throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         return obj->GetPropertyAttributes(String::New(name));
     }
@@ -302,7 +319,7 @@ extern "C"
     {
         auto handle = proxy->Handle();
         if (handle.IsEmpty() || !handle->IsArray())
-            throw exception("The handle does not represent an array object.");
+            throw v8net_exception("The handle does not represent an array object.");
         return handle.As<Array>()->Length();
     }
 

@@ -173,8 +173,9 @@ namespace V8.Net
 
         public ObjectTemplate()
         {
-            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly())
-                throw new InvalidOperationException("You much create object templates by calling 'V8Engine.CreateObjectTemplate()'.");
+            // FIXME: This doesn't work on Mono. The calling assembly is mscorlib, while executing assembly is V8.NET.
+//            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly())
+//                throw new InvalidOperationException("You much create object templates by calling 'V8Engine.CreateObjectTemplate()'.");
         }
 
         internal void _Initialize(V8Engine v8EngineProxy, bool registerPropertyInterceptors = true)

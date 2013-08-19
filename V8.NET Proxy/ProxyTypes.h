@@ -5,6 +5,8 @@
 #include <vector>
 #if (_MSC_PLATFORM_TOOLSET >= 110)
 #include <mutex>
+#elif defined(__GXX_EXPERIMENTAL_CXX0X__)
+#include <mutex>
 #endif
 #include <v8stdint.h>
 #include "Platform.h"
@@ -27,8 +29,10 @@ using namespace std;
 #else
 #include <glib.h>
 #define ALLOC_MANAGED_MEM(size) g_malloc(size)
+#define REALLOC_MANAGED_MEM(ptr, size) g_realloc(ptr, size)
 #define FREE_MANAGED_MEM(ptr) g_free(ptr)
-#define STDCALL __stdcall
+// according to http://stackoverflow.com/questions/3054257/is-there-stdcall-in-linux
+#define STDCALL
 #endif
 
 #define USING_V8_SHARED 1
@@ -39,7 +43,11 @@ using namespace std;
 
 using namespace v8;
 
+#if _WIN32 || _WIN64
 #define EXPORT __declspec(dllexport)
+#else
+#define EXPORT
+#endif
 
 // ========================================================================================================================
 
@@ -213,7 +221,7 @@ public:
     V8EngineProxy* EngineProxy() { return _EngineProxy; }
     int32_t EngineID() { return _EngineID; }
 
-    Handle<Value> Handle();
+    v8::Handle<Value> Handle();
 
     void MakeWeak();
     void MakeStrong();
@@ -221,9 +229,9 @@ public:
     int GetManagedObjectID();
     void UpdateValue();
 
-    friend V8EngineProxy;
-    friend ObjectTemplateProxy;
-    friend FunctionTemplateProxy;
+    friend class V8EngineProxy;
+    friend class ObjectTemplateProxy;
+    friend class FunctionTemplateProxy;
 };
 #pragma pack(pop)
 
@@ -432,8 +440,8 @@ public:
 
     HandleProxy* CreateObject(int32_t managedObjectID);
 
-    friend V8EngineProxy;
-    friend FunctionTemplateProxy;
+    friend class V8EngineProxy;
+    friend class FunctionTemplateProxy;
 };
 #pragma pack(pop)
 
@@ -474,7 +482,7 @@ public:
 
     HandleProxy* CreateInstance(int32_t managedObjectID, int32_t argCount, HandleProxy** args);
 
-    friend V8EngineProxy;
+    friend class V8EngineProxy;
 };
 #pragma pack(pop)
 
@@ -516,9 +524,9 @@ protected:
     static int32_t _NextEngineID;
     int32_t _EngineID;
 
-    Isolate* _Isolate;
+    v8::Isolate* _Isolate;
     ObjectTemplateProxy* _GlobalObjectTemplateProxy; // (for working with the managed side regarding the global scope)
-    Persistent<Context> _Context;
+    Persistent<v8::Context> _Context;
     Persistent<Object> _GlobalObject; // (taken from the context)
     ManagedV8GarbageCollectionRequestCallback _ManagedV8GarbageCollectionRequestCallback;
 
@@ -530,8 +538,8 @@ protected:
 
 public:
 
-    Isolate* Isolate();
-    Handle<Context> Context();
+    v8::Isolate* Isolate();
+    Handle<v8::Context> Context();
 
     V8EngineProxy(bool enableDebugging, DebugMessageDispatcher* debugMessageDispatcher, int debugPort);
     ~V8EngineProxy();
@@ -576,9 +584,9 @@ public:
     HandleProxy* CreateArray(uint16_t** items, uint16_t length);
     HandleProxy* CreateObject(int32_t managedObjectID);
 
-    friend HandleProxy;
-    friend ObjectTemplateProxy;
-    friend FunctionTemplateProxy;
+    friend class HandleProxy;
+    friend class ObjectTemplateProxy;
+    friend class FunctionTemplateProxy;
 };
 
 // ========================================================================================================================
