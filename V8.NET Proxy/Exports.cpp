@@ -152,10 +152,7 @@ extern "C"
             {
                 if (templateProxy != nullptr)
                     obj->SetAlignedPointerInInternalField(0, templateProxy); // (stored a reference to the proxy instance for the call-back function(s))
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-                obj->SetInternalField(1, External::New((void*)managedObjectID));
-#pragma GCC diagnostic pop
+                obj->SetInternalField(1, External::New((void*)(intptr_t)managedObjectID));
             }
             obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID)); // (won't be used on template created objects [fields are faster], but done anyhow for consistency)
         }

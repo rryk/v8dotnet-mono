@@ -94,10 +94,7 @@ Handle<Value> ObjectTemplateProxy::GetProperty(Local<String> hName, const Access
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto str = proxy->_EngineProxy->GetNativeString(*hName); // TODO: This can be faster - no need to allocate every time!
                 auto result = proxy->NamedPropertyGetter(str.String, maInfo); // (assumes the 'str' memory will be released by the managed side)
@@ -126,10 +123,7 @@ Handle<Value> ObjectTemplateProxy::SetProperty(Local<String> hName, Local<Value>
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto str = proxy->_EngineProxy->GetNativeString(*hName);
                 HandleProxy *val = proxy->_EngineProxy->GetHandleProxy(value);
@@ -159,10 +153,7 @@ Handle<Integer> ObjectTemplateProxy::GetPropertyAttributes(Local<String> hName, 
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto str = proxy->_EngineProxy->GetNativeString(*hName);
                 int result = proxy->NamedPropertyQuery(str.String, maInfo); // (assumes the 'str' memory will be released by the managed side)
@@ -191,10 +182,7 @@ Handle<Boolean> ObjectTemplateProxy::DeleteProperty(Local<String> hName, const A
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto str = proxy->_EngineProxy->GetNativeString(*hName);
                 int result = proxy->NamedPropertyDeleter(str.String, maInfo); // (assumes the 'str' memory will be released by the managed side)
@@ -226,10 +214,7 @@ Handle<Array> ObjectTemplateProxy::GetPropertyNames(const AccessorInfo& info) //
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->NamedPropertyEnumerator(maInfo); // (assumes the 'str' memory will be released by the managed side)
                 if (result != nullptr) return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
@@ -256,10 +241,7 @@ Handle<Value> ObjectTemplateProxy::GetProperty(uint32_t index, const AccessorInf
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->IndexedPropertyGetter(index, maInfo); // (assumes the 'str' memory will be released by the managed side)
                 if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
@@ -286,10 +268,7 @@ Handle<Value> ObjectTemplateProxy::SetProperty(uint32_t index, Local<Value> valu
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 HandleProxy *val = proxy->_EngineProxy->GetHandleProxy(value);
                 auto result = proxy->IndexedPropertySetter(index, val, maInfo); // (assumes the 'str' memory will be released by the managed side)
@@ -317,10 +296,7 @@ Handle<Integer> ObjectTemplateProxy::GetPropertyAttributes(uint32_t index, const
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 int result = proxy->IndexedPropertyQuery(index, maInfo); // (assumes the 'str' memory will be released by the managed side)
                 if (result >= 0)
@@ -347,10 +323,7 @@ Handle<Boolean> ObjectTemplateProxy::DeleteProperty(uint32_t index, const Access
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 int result = proxy->IndexedPropertyDeleter(index, maInfo); // (assumes the 'str' memory will be released by the managed side)
 
@@ -380,10 +353,7 @@ Handle<Array> ObjectTemplateProxy::GetPropertyIndices(const AccessorInfo& info) 
 
             if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-fpermissive"
-                auto managedObjectID = (int32_t)obj->GetInternalField(1).As<External>()->Value();
-#pragma GCC diagnostic pop
+                auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->IndexedPropertyEnumerator(maInfo); // (assumes the 'str' memory will be released by the managed side)
                 if (result != nullptr) return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)

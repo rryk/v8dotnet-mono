@@ -115,10 +115,7 @@ HandleProxy* FunctionTemplateProxy::CreateInstance(int32_t managedObjectID, int3
     proxyVal->_ManagedObjectID = managedObjectID;
     auto count = obj->InternalFieldCount();//??
     obj->SetAlignedPointerInInternalField(0, this); // (stored a reference to the proxy instance for the call-back functions)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wint-to-pointer-cast"
-    obj->SetInternalField(1, External::New((void*)managedObjectID)); // (stored a reference to the managed object for the call-back functions)
-#pragma GCC diagnostic pop
+    obj->SetInternalField(1, External::New((void*)(intptr_t)managedObjectID)); // (stored a reference to the managed object for the call-back functions)
     obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID)); // (won't be used on template created objects [fields are faster], but done anyhow for consistency)
     return proxyVal;
 }
