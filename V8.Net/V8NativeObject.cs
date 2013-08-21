@@ -406,7 +406,7 @@ namespace V8.Net
         /// <summary>
         /// Returns a list of all property names for this object (including all objects in the prototype chain).
         /// </summary>
-        public string[] GetPropertyNames()
+        public virtual string[] GetPropertyNames()
         {
             return _Handle._Handle.GetPropertyNames();
         }
@@ -426,7 +426,7 @@ namespace V8.Net
         /// If a property doesn't exist, then 'V8PropertyAttributes.None' is returned
         /// (Note: only V8 returns 'None'. The value 'Undefined' has an internal proxy meaning for property interception).</para>
         /// </summary>
-        public V8PropertyAttributes GetPropertyAttributes(string name)
+        public virtual V8PropertyAttributes GetPropertyAttributes(string name)
         {
             return _Handle._Handle.GetPropertyAttributes(name);
         }
