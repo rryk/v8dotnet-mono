@@ -6,6 +6,7 @@ using System.Text;
 #if V2 || V3 || V3_5
 #else
 using System.Dynamic;
+using System.Linq.Expressions;
 #endif
 
 namespace V8.Net
@@ -21,23 +22,12 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// A reference to the managed object handle that wraps the native V8 handle for this managed object.
-        /// This simply calls 'V8Engine.GetObjectHandle()'.
-        /// </summary>
-        new InternalHandle Handle { get; }
-
-        // --------------------------------------------------------------------------------------------------------------------
-
-        /// <summary>
         /// Holds a Key->Value reference to all property names and values for the JavaScript object that this managed object represents.
+        /// Accessing the 'Properties' property without setting it first creates a new dictionary object by default.
         /// </summary>
         IDictionary<string, IJSProperty> Properties { get; }
 
-        /// <summary>
-        /// A reference to the ObjectTemplate that created this object.
-        /// <para>Note: This simply calls 'V8Engine.GetObjectTemplate()'.</para>
-        /// </summary>
-        ObjectTemplate ObjectTemplate { get; }
+        // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Returns the value/object handle associated with the specified property.
@@ -56,11 +46,7 @@ namespace V8.Net
         /// Intercepts JavaScript access for properties on the associated JavaScript object for setting values.
         /// <para>To allow the V8 engine to perform the default set action, return "Handle.Empty".</para>
         /// </summary>
-#if V2 || V3 || V3_5
-        InternalHandle NamedPropertySetter(ref string propertyName, InternalHandle value, V8PropertyAttributes attributes);
-#else
         InternalHandle NamedPropertySetter(ref string propertyName, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined);
-#endif
 
         /// <summary>
         /// Let's the V8 engine know the attributes for the specified property.
@@ -130,21 +116,27 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// A reference to the managed object handle that wraps the native V8 handle for this managed object
-        /// (this simply calls 'base.Handle'). You cannot change handles on managed objects because they are usually associated with object interceptors.
+        /// A reference to the managed object handle that wraps the native V8 handle for this managed object (this simply returns 'base.Handle'). 
+        /// You should never change handles on managed objects because they are usually associated with object interceptors,
+        /// and changing the handle will break the call-back system.
         /// </summary>
-        InternalHandle IV8ManagedObject.Handle { get { return base.Handle; } }
+        new Handle Handle { get { return _Handle; } }
 
         /// <summary>
         /// A reference to the ObjectTemplate instance that owns this object.
         /// </summary>
-        public ObjectTemplate ObjectTemplate { get { return (ObjectTemplate)Engine.GetObjectTemplate(this); } }
+        public ObjectTemplate ObjectTemplate { get { return (ObjectTemplate)Template; } }
 
         /// <summary>
         /// Holds a Key->Value reference to all property names and values for the JavaScript object that this managed object represents.
+        /// Accessing the 'Properties' property without setting it first creates a new dictionary object by default.
         /// </summary>
-        public virtual IDictionary<string, IJSProperty> Properties { get { return _Properties ?? (_Properties = new Dictionary<string, IJSProperty>()); } }
-        IDictionary<string, IJSProperty> _Properties;
+        public virtual IDictionary<string, IJSProperty> Properties
+        {
+            get { return _Properties ?? (_Properties = new Dictionary<string, IJSProperty>()); }
+            protected set { _Properties = value; }
+        }
+        protected IDictionary<string, IJSProperty> _Properties;
 
         IJSProperty IV8ManagedObject.this[string propertyName]
         {
@@ -176,22 +168,40 @@ namespace V8.Net
             }
         }
 
+
         // --------------------------------------------------------------------------------------------------------------------
 
-        /// <summary>
-        /// Called immediately after creating an object instance and setting the V8Engine property.
-        /// </summary>
-        public override void Initialize() { base.Initialize(); }
+        public V8ManagedObject()
+            : base()
+        {
+        }
+
+        public V8ManagedObject(IV8ManagedObject proxy)
+            : base(proxy)
+        {
+        }
 
         // --------------------------------------------------------------------------------------------------------------------
 
         public virtual InternalHandle NamedPropertyGetter(ref string propertyName)
         {
+            if (_Proxy != this)
+            {
+                var result = ((IV8ManagedObject)_Proxy).NamedPropertyGetter(ref propertyName);
+                if (!result.IsUndefined) return result;
+            }
+
             return this[propertyName];
         }
 
         public virtual InternalHandle NamedPropertySetter(ref string propertyName, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined)
         {
+            if (_Proxy != this)
+            {
+                var result = ((IV8ManagedObject)_Proxy).NamedPropertySetter(ref propertyName, value, attributes);
+                if (!result.IsUndefined) return result;
+            }
+
             var jsVal = ((IV8ManagedObject)this)[propertyName];
 
             if (jsVal.IsEmpty)
@@ -212,24 +222,46 @@ namespace V8.Net
 
         public virtual V8PropertyAttributes? NamedPropertyQuery(ref string propertyName)
         {
+            if (_Proxy != this)
+            {
+                var result = ((IV8ManagedObject)_Proxy).NamedPropertyQuery(ref propertyName);
+                if (result != null) return result;
+            }
+
             return ((IV8ManagedObject)this)[propertyName].Attributes;
         }
 
         public virtual bool? NamedPropertyDeleter(ref string propertyName)
         {
+            if (_Proxy != this)
+            {
+                var result = ((IV8ManagedObject)_Proxy).NamedPropertyDeleter(ref propertyName);
+                if (result != null) return result;
+            }
+
             var jsVal = ((IV8ManagedObject)this)[propertyName];
+
             if ((jsVal.Attributes & V8PropertyAttributes.DontDelete) != 0)
                 return false;
+
             return Properties.Remove(propertyName);
         }
 
         public virtual InternalHandle NamedPropertyEnumerator()
         {
+            if (_Proxy != this)
+            {
+                var result = ((IV8ManagedObject)_Proxy).NamedPropertyEnumerator();
+                if (!result.IsUndefined) return result;
+            }
+
             List<string> names = new List<string>(Properties.Count);
+
             foreach (var prop in Properties)
                 if (prop.Value != null && (prop.Value.Attributes & V8PropertyAttributes.DontEnum) == 0)
                     names.Add(prop.Key);
-            return Engine.CreatArray(names);
+
+            return Engine.CreateValue(names);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -264,108 +296,49 @@ namespace V8.Net
         }
 
         // --------------------------------------------------------------------------------------------------------------------
-        // Dynamic Support for .NET v4.0 and higher.
-
-#if V2 || V3 || V3_5
-#else
-
-        public override IEnumerable<string> GetDynamicMemberNames()
-        {
-            return _Properties.Keys;
-        }
-
-        public override bool TryGetMember(GetMemberBinder binder, out object result)
-        {
-            var jsVal = ((IV8ManagedObject)this)[binder.Name];
-            if (!jsVal.IsEmpty)
-            {
-                var val = jsVal.Value;
-                if (val.HasManagedObject)
-                    result = val.ManagedObject; // (for objects, return the instance instead of a value handle)
-                else
-                    result = jsVal.Value;
-                return true;
-            }
-            result = null;
-            return false;
-        }
-
-        public override bool TrySetMember(SetMemberBinder binder, object value)
-        {
-            var propertyName = binder.Name;
-
-            if (value is Handle || value is InternalHandle)
-                NamedPropertySetter(ref propertyName, (InternalHandle)value); // (objects are detected and added directly! ;))
-            else if (value is IV8NativeObject)
-                NamedPropertySetter(ref propertyName, ((IV8NativeObject)value).Handle); // (objects are detected and added directly! ;))
-            else if (value is IJSProperty)
-                ((IV8ManagedObject)this)[propertyName] = (IJSProperty)value; // (IJSProperty values are detected and set directly! ;))
-            else
-                NamedPropertySetter(ref propertyName, Engine.CreateNativeValue(value));
-
-            return true;
-        }
-
-        public override bool TryDeleteMember(DeleteMemberBinder binder)
-        {
-            return _Properties.Remove(binder.Name);
-        }
-
-        public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object result)
-        {
-            if (indexes.Length == 1)
-            {
-                var o = indexes[0];
-                if (o != null)
-                {
-                    var jsVal = ((IV8ManagedObject)this)[o.ToString()];
-                    if (!jsVal.IsEmpty) { result = jsVal.Value; return true; }
-                }
-            }
-            result = null;
-            return false;
-        }
-
-#endif
-
-        // --------------------------------------------------------------------------------------------------------------------
         // Since some base methods operate on object properties, and the properties exist on this managed object, we override
         // them here to speed things up.
 
-#if V2 || V3 || V3_5
-        public override bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes)
-#else
         public override bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None)
-#endif
         {
-            NamedPropertySetter(ref name, value, attributes);
+            var result = NamedPropertySetter(ref name, value, attributes);
+            if (result.IsUndefined) return base.SetProperty(name, value, attributes); // (if this virtual override fails to set the property, try to do it via the base [directly on the native object])
             return true;
         }
 
         public override bool SetProperty(int index, InternalHandle value)
         {
-            IndexedPropertySetter(index, value);
+            var result = IndexedPropertySetter(index, value);
+            if (result.IsUndefined) return base.SetProperty(index, value);
             return true;
         }
 
         public override InternalHandle GetProperty(string name)
         {
-            return NamedPropertyGetter(ref name);
+            var result = NamedPropertyGetter(ref name);
+            if (result.IsUndefined) return base.GetProperty(name);
+            return result;
         }
 
         public override InternalHandle GetProperty(int index)
         {
-            return IndexedPropertyGetter(index);
+            var result = IndexedPropertyGetter(index);
+            if (result.IsUndefined) return base.GetProperty(index);
+            return result;
         }
 
         public override bool DeleteProperty(string name)
         {
-            return NamedPropertyDeleter(ref name) ?? false;
+            var result = NamedPropertyDeleter(ref name);
+            if (result == null) return base.DeleteProperty(name);
+            return result ?? false;
         }
 
         public override bool DeleteProperty(int index)
         {
-            return IndexedPropertyDeleter(index) ?? false;
+            var result = IndexedPropertyDeleter(index);
+            if (result == null) return base.DeleteProperty(index);
+            return result ?? false;
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -374,16 +347,21 @@ namespace V8.Net
     // ========================================================================================================================
 
     /// <summary>
-    /// This interface has been renamed to 'IV8ManagedObject'.
-    /// This is to bring to the attention that 'IV8ManagedObject' type objects are the true native V8 objects and are many times faster.
+    /// This generic version of 'V8ManagedObject' allows injecting your own class by implementing the 'IV8ManagedObject' interface.
     /// </summary>
-    public interface IV8Object { }
+    /// <typeparam name="T">Your own class, which implements the 'IV8ManagedObject' interface.  Don't use the generic version if you are able to inherit from 'V8ManagedObject' instead.</typeparam>
+    public unsafe class V8ManagedObject<T> : V8ManagedObject
+        where T : IV8ManagedObject, new()
+    {
+        // --------------------------------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// This class has been renamed to 'V8ManagedObject'.
-    /// This is to bring to the attention that 'V8ManagedObject' type objects are the true native V8 objects and are many times faster.
-    /// </summary>
-    public class V8Object { }
+        public V8ManagedObject()
+            : base(new T())
+        {
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+    }
 
     // ========================================================================================================================
 }

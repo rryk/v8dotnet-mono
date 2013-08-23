@@ -17,27 +17,34 @@ namespace {
 // ############################################################################################################################
 // Misc. Global Functions
 
-Handle<Value> _GetObjectProperty(Local<String> hName, const AccessorInfo& info) // (for non-ObjectTemplate objects!)
+Handle<Value> _GetObjectProperty(Local<String> hName, const AccessorInfo& info) // (bridge callback, for non-ObjectTemplate objects!)
 {
     auto obj = info.Holder();
 
     if (!obj.IsEmpty())
     {
         auto hID = obj->GetHiddenValue(String::New("ManagedObjectID"));
-        auto hGetter = obj->GetHiddenValue(String::New("_Getter_"));
-        if (!hID->IsUndefined() && hGetter->IsExternal())
+        auto hAccessors = info.Data().As<Array>(); // [0] == getter, [1] == setter
+        if (!hID->IsUndefined() && hAccessors->Length() == 2)
         {
             auto engine = (V8EngineProxy*)info.GetIsolate()->GetData();
             auto managedObjectID = (int32_t)hID->Int32Value();
-            ManagedAccessorGetter getter = (ManagedAccessorGetter)hGetter.As<External>()->Value();
+            ManagedAccessorGetter getter = (ManagedAccessorGetter)hAccessors->Get(0).As<External>()->Value();
 
             if (managedObjectID >= 0 && getter != nullptr)
             {
                 auto _this = engine->GetHandleProxy(info.This());
                 auto str = engine->GetNativeString(*hName);
+
                 auto result = getter(_this, str.String); // (assumes the 'str' memory will be released by the managed side)
+
                 str.Dispose();
-                if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+
+                if (result != nullptr)  
+                    if (result->IsError())
+                        return ThrowException(Exception::Error(result->Handle()->ToString()));
+                    else
+                        return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -48,27 +55,32 @@ Handle<Value> _GetObjectProperty(Local<String> hName, const AccessorInfo& info) 
 
 // ------------------------------------------------------------------------------------------------------------------------
 
-void _SetObjectProperty(Local<String> hName, Local<Value> value, const AccessorInfo& info) // (for non-ObjectTemplate objects!)
+void _SetObjectProperty(Local<String> hName, Local<Value> value, const AccessorInfo& info) // (bridge callback, for non-ObjectTemplate objects!)
 {
     auto obj = info.Holder();
 
     if (!obj.IsEmpty())
     {
         auto hID = obj->GetHiddenValue(String::New("ManagedObjectID"));
-        auto hSetter = obj->GetHiddenValue(String::New("_Setter_"));
-        if (!hID->IsUndefined() && hSetter->IsExternal())
+        auto hAccessors = info.Data().As<Array>(); // [0] == getter, [1] == setter
+        if (!hID->IsUndefined() && hAccessors->Length() == 2)
         {
             auto engine = (V8EngineProxy*)info.GetIsolate()->GetData();
             auto managedObjectID = (int32_t)hID->Int32Value();
-            ManagedAccessorSetter setter = (ManagedAccessorSetter)hSetter.As<External>()->Value();
+            ManagedAccessorSetter setter = (ManagedAccessorSetter)hAccessors->Get(1).As<External>()->Value();
 
             if (managedObjectID >= 0 && setter != nullptr)
             {
                 auto _this = engine->GetHandleProxy(info.This());
                 auto str = engine->GetNativeString(*hName);
                 auto _value = engine->GetHandleProxy(value);
-                setter(_this, str.String, _value); // (assumes the 'str' memory will be released by the managed side)
+
+                auto result = setter(_this, str.String, _value); // (assumes the 'str' memory will be released by the managed side)
+
                 str.Dispose();
+             
+                if (result != nullptr && result->IsError())
+                    ThrowException(Exception::Error(result->Handle()->ToString()));
             }
         }
     }
@@ -277,10 +289,10 @@ extern "C"
             throw v8net_exception("The handle does not represent an object.");
         auto obj = handle.As<Object>();
         obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID));
-        //??obj->SetHiddenValue(String::New("_HandleProxy_"), External::New(proxy));
-        obj->SetHiddenValue(String::New("_Getter_"), External::New((void*)getter));
-        obj->SetHiddenValue(String::New("_Setter_"), External::New((void*)setter));
-        obj->SetAccessor(String::New(name), _GetObjectProperty, _SetObjectProperty, v8::Null(), access, attributes);  // TODO: Check how this affects objects created from templates!
+        auto accessors = Array::New(2); // [0] == getter, [1] == setter
+        accessors->Set(0, External::New(getter));
+        accessors->Set(1, External::New(setter));
+        obj->SetAccessor(String::New(name), _GetObjectProperty, _SetObjectProperty, accessors, access, attributes);  // TODO: Check how this affects objects created from templates!
     }
 
     EXPORT HandleProxy* STDCALL GetPropertyNames(HandleProxy *proxy)
@@ -347,6 +359,10 @@ extern "C"
     EXPORT HandleProxy* STDCALL CreateArray(V8EngineProxy *engine, HandleProxy** items, uint16_t length) { return engine->CreateArray(items, length); }
     EXPORT HandleProxy* STDCALL CreateStringArray(V8EngineProxy *engine, uint16_t **items, uint16_t length) { return engine->CreateArray(items, length); }
 
+    EXPORT HandleProxy* STDCALL CreateNullValue(V8EngineProxy *engine) { return engine->CreateNullValue(); }
+  
+    EXPORT HandleProxy* STDCALL CreateError(V8EngineProxy *engine, uint16_t* message, JSValueType errorType) { return engine->CreateError(message, errorType); }
+
     // ------------------------------------------------------------------------------------------------------------------------
     // Handle Related
 
@@ -356,7 +372,7 @@ extern "C"
     EXPORT void STDCALL DisposeHandleProxy(HandleProxy *handleProxy) { if (handleProxy != nullptr) handleProxy->Dispose(); }
 
     EXPORT void STDCALL UpdateHandleValue(HandleProxy *handleProxy) { if (handleProxy != nullptr) handleProxy->UpdateValue(); }
-    EXPORT int STDCALL GetHandleManagedObjectID(HandleProxy *handleProxy) { if (handleProxy != nullptr) return handleProxy->GetManagedObjectID(); else return -1; }
+    EXPORT int STDCALL GetHandleManagedObjectID(HandleProxy *handleProxy) { if (handleProxy != nullptr) return handleProxy->GetManagedObjectID(); else return -2; }
 
     // ------------------------------------------------------------------------------------------------------------------------
 }

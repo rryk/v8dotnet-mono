@@ -209,6 +209,8 @@ public:
 
     int32_t SetManagedObjectID(int32_t id) { return (_ManagedObjectID = id); }
 
+    bool IsError() { return _Type < 0; }
+
     // Disposes of the handle that is wrapped by this proxy instance.
     bool Dispose();
 
@@ -340,8 +342,9 @@ typedef HandleProxy* (STDCALL *ManagedAccessorGetter)(HandleProxy *_this, uint16
 
 /**
 * Intercepts requests on objects with setters applied.
+The return is always undefined, unless an error occurs.
 */
-typedef void (STDCALL *ManagedAccessorSetter)(HandleProxy *_this, uint16_t* propertyName, HandleProxy* value);
+typedef HandleProxy* (STDCALL *ManagedAccessorSetter)(HandleProxy *_this, uint16_t* propertyName, HandleProxy* value);
 
 // ------------------------------------------------------------------------------------------------------------------------
 
@@ -579,10 +582,12 @@ public:
     HandleProxy* CreateInteger(int32_t num);
     HandleProxy* CreateBoolean(bool b);
     HandleProxy* CreateString(uint16_t* str);
+    HandleProxy* CreateError(uint16_t* message, JSValueType errorType);
     HandleProxy* CreateDate(double ms);
     HandleProxy* CreateArray(HandleProxy** items, uint16_t length);
     HandleProxy* CreateArray(uint16_t** items, uint16_t length);
     HandleProxy* CreateObject(int32_t managedObjectID);
+    HandleProxy* CreateNullValue();
 
     friend class HandleProxy;
     friend class ObjectTemplateProxy;

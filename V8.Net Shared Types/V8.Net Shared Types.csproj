@@ -122,6 +122,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Binding.cs" />
     <Compile Include="Enums.cs" />
     <Compile Include="NativeTypes.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -3,14 +3,16 @@
 // ------------------------------------------------------------------------------------------------------------------------
 
 ObjectTemplateProxy::ObjectTemplateProxy(V8EngineProxy* engineProxy)
-    :ProxyBase(ObjectTemplateProxyClass), _EngineProxy(engineProxy), _EngineID(engineProxy->_EngineID)
+    :ProxyBase(ObjectTemplateProxyClass), _EngineProxy(engineProxy), _EngineID(engineProxy->_EngineID),
+    NamedPropertyGetter(nullptr), NamedPropertySetter(nullptr), NamedPropertyQuery(nullptr), NamedPropertyDeleter(nullptr), NamedPropertyEnumerator(nullptr)
 {
     _ObjectTemplate = Persistent<ObjectTemplate>::New(_EngineProxy->Isolate(), ObjectTemplate::New());
     _ObjectTemplate->SetInternalFieldCount(2); // (one for the associated proxy, and one for the associated managed object ID)
 }
 
 ObjectTemplateProxy::ObjectTemplateProxy(V8EngineProxy* engineProxy, Local<ObjectTemplate> objectTemplate)
-    :ProxyBase(ObjectTemplateProxyClass), _EngineProxy(engineProxy), _EngineID(engineProxy->_EngineID)
+    :ProxyBase(ObjectTemplateProxyClass), _EngineProxy(engineProxy), _EngineID(engineProxy->_EngineID),
+    NamedPropertyGetter(nullptr), NamedPropertySetter(nullptr), NamedPropertyQuery(nullptr), NamedPropertyDeleter(nullptr), NamedPropertyEnumerator(nullptr)
 {
     _ObjectTemplate = Persistent<ObjectTemplate>::New(_EngineProxy->Isolate(), objectTemplate);
     _ObjectTemplate->SetInternalFieldCount(2); // (one for the associated proxy, and one for the associated managed object ID)
@@ -92,14 +94,18 @@ Handle<Value> ObjectTemplateProxy::GetProperty(Local<String> hName, const Access
         {
             auto proxy = reinterpret_cast<ObjectTemplateProxy*>(obj->GetAlignedPointerFromInternalField(0));
 
-            if (proxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
+            if (proxy != nullptr && proxy->_EngineProxy != nullptr && proxy->Type == ObjectTemplateProxyClass)
             {
                 auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto str = proxy->_EngineProxy->GetNativeString(*hName); // TODO: This can be faster - no need to allocate every time!
                 auto result = proxy->NamedPropertyGetter(str.String, maInfo); // (assumes the 'str' memory will be released by the managed side)
                 str.Dispose();
-                if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr) 
+                    if (result->IsError())
+                        return ThrowException(Exception::Error(result->Handle()->ToString()));
+                    else
+                        return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -129,7 +135,11 @@ Handle<Value> ObjectTemplateProxy::SetProperty(Local<String> hName, Local<Value>
                 HandleProxy *val = proxy->_EngineProxy->GetHandleProxy(value);
                 auto result = proxy->NamedPropertySetter(str.String, val, maInfo); // (assumes the 'str' memory will be released by the managed side)
                 str.Dispose();
-                if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr)
+                    if (result->IsError())
+                        return ThrowException(Exception::Error(result->Handle()->ToString()));
+                    else
+                        return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -217,7 +227,15 @@ Handle<Array> ObjectTemplateProxy::GetPropertyNames(const AccessorInfo& info) //
                 auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->NamedPropertyEnumerator(maInfo); // (assumes the 'str' memory will be released by the managed side)
-                if (result != nullptr) return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr) 
+                    if (result->IsError())
+                    {
+                        auto array = Array::New(1);
+                        array->Set(0, ThrowException(Exception::Error(result->Handle()->ToString())));
+                        return array;
+                    }
+                    else
+                        return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -244,7 +262,11 @@ Handle<Value> ObjectTemplateProxy::GetProperty(uint32_t index, const AccessorInf
                 auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->IndexedPropertyGetter(index, maInfo); // (assumes the 'str' memory will be released by the managed side)
-                if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr) 
+                    if (result->IsError())
+                        return ThrowException(Exception::Error(result->Handle()->ToString()));
+                    else
+                        return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -272,7 +294,11 @@ Handle<Value> ObjectTemplateProxy::SetProperty(uint32_t index, Local<Value> valu
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 HandleProxy *val = proxy->_EngineProxy->GetHandleProxy(value);
                 auto result = proxy->IndexedPropertySetter(index, val, maInfo); // (assumes the 'str' memory will be released by the managed side)
-                if (result != nullptr) return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr) 
+                    if (result->IsError())
+                        return ThrowException(Exception::Error(result->Handle()->ToString()));
+                    else
+                        return result->Handle(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }
@@ -356,7 +382,15 @@ Handle<Array> ObjectTemplateProxy::GetPropertyIndices(const AccessorInfo& info) 
                 auto managedObjectID = (int32_t)(intptr_t)obj->GetInternalField(1).As<External>()->Value();
                 ManagedAccessorInfo maInfo(proxy, managedObjectID, info);
                 auto result = proxy->IndexedPropertyEnumerator(maInfo); // (assumes the 'str' memory will be released by the managed side)
-                if (result != nullptr) return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
+                if (result != nullptr) 
+                    if (result->IsError())
+                    {
+                        auto array = Array::New(1);
+                        array->Set(0, ThrowException(Exception::Error(result->Handle()->ToString())));
+                        return array;
+                    }
+                    else
+                        return result->Handle().As<Array>(); // (the result was create via p/invoke calls, but is expected to be tracked and freed on the managed side)
                 // (result == null == undefined [which means the managed side didn't return anything])
             }
         }

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-#if V2 || V3 || V3_5
-#else
+#if !(V1_1 || V2 || V3 || V3_5)
 using System.Dynamic;
+using System.Linq.Expressions;
 #endif
 
 namespace V8.Net
@@ -15,129 +15,27 @@ namespace V8.Net
     /// <summary>
     /// An interface for the V8NativeObject object.
     /// </summary>
-    public interface IV8NativeObject : IDisposable
+    public interface IV8NativeObject : IV8Object, IDisposable, IDynamicMetaObjectProvider
     {
-        // --------------------------------------------------------------------------------------------------------------------
-
-        /// <summary>
-        /// A reference to the V8 engine that owns the object (once set, this should never change).
-        /// </summary>
-        V8Engine Engine { get; set; }
-
-        /// <summary>
-        /// A reference to the managed object handle that wraps the native V8 handle for this managed object.
-        /// This simply calls 'V8Engine.GetObjectHandle()' and 'V8Engine.SetObjectHandle()'.
-        /// </summary>
-        InternalHandle Handle { get; set; }
-
-        /// <summary>
-        /// The ID of this managed object within a V8Engine instance (once set, this should never change).
-        /// </summary>
-        int ID { get; set; }
-
-#if V2 || V3 || V3_5
-#else
-        /// <summary>
-        /// This normally is expected to just return "this as dynamic"; however, it also allows one to use some other dynamic object instead.
-        /// If dynamic operations are not supported, this should return null.
-        /// </summary>
-        dynamic DynamicObject { get; }
-#endif
-        /// <summary>
-        /// The prototype of the object (every JavaScript object implicitly has a prototype).
-        /// This simple calls 'V8Engine.GetObjectPrototype()'.
-        /// <para>Note: For basic objects not created by templates, the prototype is not set until
-        /// 'V8Engine.GetObjectPrototype()' is called to retrieve it.</para>
-        /// </summary>
-        IV8NativeObject Prototype { get; }
-
-        /// <summary>
-        /// Returns the value/object handle associated with the specified property.
-        /// </summary>
-        InternalHandle this[string propertyName] { get; set; }
-
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Called immediately after creating an object instance and setting the V8Engine property.
         /// <para>Note: Override "Dispose()" instead of implementing destructors (finalizers) if required.</para>
         /// </summary>
-        void Initialize();
+        void Initialize(V8NativeObject owner);
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Calls the V8 'Set()' function on the underlying native object.
-        /// Return true if successful. You can combine attribute flags using the bitwise OR operator ('|').
+        /// Called when there are no more references and the object is ready to be disposed.
+        /// You should always override this if you need to dispose of any native resources yourself.
+        /// DO NOT rely on the destructor (finalizer).
+        /// <para>Note: This can be called from the finalizer thread (indirectly through V8.NET), in which case
+        /// 'GC.SuppressFinalize()' will be called automatically upon return (to prevent collection until the native side is also ready).</para>
+        /// If overriding, make sure to call back to this base method.
         /// </summary>
-        bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None);
-
-        /// <summary>
-        /// Calls the V8 'Set()' function on the underlying native object.
-        /// Return true if successful.
-        /// </summary>
-        bool SetProperty(Int32 index, InternalHandle value);
-
-        /// <summary>
-        /// Calls the V8 'Get()' function on the underlying native object.
-        /// If the property doesn't exist, the 'IsUndefined' property will be true.
-        /// </summary>
-        InternalHandle GetProperty(string name);
-
-        /// <summary>
-        /// Calls the V8 'Get()' function on the underlying native object.
-        /// If the property doesn't exist, the 'IsUndefined' property will be true.
-        /// </summary>
-        InternalHandle GetProperty(Int32 index);
-
-        /// <summary>
-        /// Calls the V8 'Delete()' function on the underlying native object.
-        /// Returns true if the property was deleted.
-        /// </summary>
-        bool DeleteProperty(string name);
-
-        /// <summary>
-        /// Calls the V8 'Delete()' function on the underlying native object.
-        /// Returns true if the property was deleted.
-        /// </summary>
-        bool DeleteProperty(Int32 index);
-
-        /// <summary>
-        /// Calls the V8 'SetAccessor()' function on the underlying native object.
-        /// </summary>
-        void SetAccessor(string name,
-            V8NativeObjectPropertyGetter getter, V8NativeObjectPropertySetter setter,
-            V8AccessControl access, V8PropertyAttributes attributes);
-
-        /// <summary>
-        /// Returns a list of all property names for this object (including all objects in the prototype chain).
-        /// </summary>
-        string[] GetPropertyNames();
-
-        /// <summary>
-        /// Returns a list of all property names for this object (excluding the prototype chain).
-        /// </summary>
-        string[] GetOwnPropertyNames();
-
-        /// <summary>
-        /// Get the attribute flags for a property of this object.
-        /// If a property doesn't exist, then 'V8PropertyAttributes.None' is returned
-        /// (Note: only V8 returns 'None'. The value 'Undefined' has an internal proxy meaning for property interception).</para>
-        /// </summary>
-        V8PropertyAttributes GetPropertyAttributes(string name);
-
-        /// <summary>
-        /// Calls an object property with a given name on a specified object as a function and returns the result.
-        /// If the function name is null or empty, then the current object is assumed to be a function object.
-        /// </summary>
-        InternalHandle Call(string functionName, params InternalHandle[] args);
-
-        /// <summary>
-        /// Calls an object property with a given name on a specified object as a function and returns the result.
-        /// The '_this' property is the "this" object within the function when called.
-        /// If the function name is null or empty, then the current object is assumed to be a function object.
-        /// </summary>
-        InternalHandle Call(string functionName, InternalHandle _this, params InternalHandle[] args);
+        new void Dispose();
 
         // --------------------------------------------------------------------------------------------------------------------
     }
@@ -146,43 +44,96 @@ namespace V8.Net
     /// Represents a basic JavaScript object. This class wraps V8 functionality for operations required on any native V8 object (including managed ones).
     /// <para>This class implements 'DynamicObject' to make setting properties a bit easier.</para>
     /// </summary>
-#if V2 || V3 || V3_5
-    public unsafe class V8NativeObject : IV8NativeObject
-#else
-    public unsafe class V8NativeObject : DynamicObject, IV8NativeObject
-#endif
+    public unsafe class V8NativeObject : IHandleBased, IV8NativeObject, IDynamicMetaObjectProvider
     {
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// A reference to the V8Engine instance that owns this object.
+        /// The default implementation for 'V8NativeObject' is to cache and return 'base.Engine', since it inherits from 'Handle'.
         /// </summary>
-        public V8Engine Engine { get; set; }
+        public V8Engine Engine { get { return _Engine ?? (_Engine = _Handle.Engine); } }
+        internal V8Engine _Engine;
+
+        public Handle AsHandle() { return _Handle; }
+        public InternalHandle AsInternalHandle { get { return _Handle._Handle; } }
+        public V8NativeObject Object { get { return this; } }
 
         /// <summary>
-        /// A reference to the managed object handle that wraps the native V8 handle for this managed object
-        /// (this simply calls 'V8Engine.GetObjectHandle()').
+        /// The V8.NET ObjectTemplate or FunctionTemplate instance associated with this object, if any, or null if this object was not created using a V8.NET template.
         /// </summary>
-        public InternalHandle Handle { get { return Engine.GetObjectHandle(this); } set { Engine.SetObjectHandle(this, value); } }
+        public ITemplate Template
+        {
+            get { return _Template; }
+            internal set
+            {
+                if (_Template != null) ((ITemplateInternal)_Template)._ReferenceCount--;
+                _Template = value;
+                if (_Template != null) ((ITemplateInternal)_Template)._ReferenceCount++;
+            }
+        }
+        ITemplate _Template;
 
-#if V2 || V3 || V3_5
-#else
         /// <summary>
-        /// Returns this object type cast as "dynamic".
+        /// The V8.NET managed object ID used to track this object instance on both the native and managed sides.
         /// </summary>
-        public virtual dynamic DynamicObject { get { return this as dynamic; } }
+        public Int32 ID
+        {
+            get { var id = _Handle.ObjectID; return id < 0 ? _ID ?? id : id; } // (this attempts to return the underlying managed object ID of the handle proxy, or the local ID if -1)
+            internal set { _Handle.ObjectID = (_ID = value).Value; } // (once set, the managed object will be fixed to the ID as long as the underlying handle has a managed object ID of -1)
+        }
+        Int32? _ID;
+
+        /// <summary>
+        /// Another object of the same interface to direct actions to (such as 'Initialize()').
+        /// If the generic type 'V8NativeObject&lt;T>' is used, then this is set to an instance of "T", otherwise this is set to "this" instance.
+        /// </summary>
+        public IV8NativeObject Proxy { get { return _Proxy; } }
+        internal IV8NativeObject _Proxy;
+
+        /// <summary>
+        /// True if this object was initialized and is ready for use.
+        /// </summary>
+        public bool IsInitilized { get; internal set; }
+
+        /// <summary>
+        /// A reference to the managed object handle that wraps the native V8 handle for this managed object.
+        /// The default implementation for 'V8NativeObject' is to return itself, since it inherits from 'Handle'.
+        /// Setting this property will call the inherited 'Set()' method to replace the handle associated with this object instance (this should never be done on
+        /// objects created from templates ('V8ManagedObject' objects), otherwise callbacks from JavaScript to the managed side will not act as expected, if at all).
+        /// </summary>
+        public ObjectHandle Handle { get { return _Handle; } set { _Handle.Set((Handle)value); } }
+        internal ObjectHandle _Handle = ObjectHandle.Empty;
+
+#if !(V1_1 || V2 || V3 || V3_5)
+        /// <summary>
+        /// Returns a "dynamic" reference to this object (which is simply the handle instance, which has dynamic support).
+        /// </summary>
+        public virtual dynamic AsDynamic { get { return _Handle; } }
 #endif
-
-        /// <summary>
-        /// The ID of this object within an ObjectTemplate instance.
-        /// </summary>
-        public int ID { get { return _ID; } set { if (_ID < 0) _ID = value; } }
-        int _ID = -1;
 
         /// <summary>
         /// The prototype of the object (every JavaScript object implicitly has a prototype).
         /// </summary>
-        public IV8NativeObject Prototype { get { return Engine.GetObjectPrototype(this); } }
+        public ObjectHandle Prototype
+        {
+            get
+            {
+                if (_Prototype == null && _Handle.IsObjectType)
+                {
+                    // ... the prototype is not yet set, so get the prototype and wrap it ...
+                    _Prototype = V8NetProxy.GetObjectPrototype(_Handle);
+                }
+
+                return _Prototype;
+            }
+        }
+        internal ObjectHandle _Prototype;
+
+        /// <summary>
+        /// Returns true if this object is ready to be garbage collected by the native side.
+        /// </summary>
+        public bool IsManagedObjectWeak { get { lock (Engine._Objects) { return _ID != null ? Engine._Objects[_ID.Value].IsGCReady : true; } } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -190,12 +141,24 @@ namespace V8.Net
         {
             get
             {
-                return GetProperty(propertyName);
+                return _Handle.GetProperty(propertyName);
             }
             set
             {
-                SetProperty(propertyName, value);
+                _Handle.SetProperty(propertyName, value);
             }
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        public V8NativeObject()
+        {
+            _Proxy = this;
+        }
+
+        public V8NativeObject(IV8NativeObject proxy)
+        {
+            _Proxy = proxy ?? this;
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -203,134 +166,190 @@ namespace V8.Net
         /// <summary>
         /// Called immediately after creating an object instance and setting the V8Engine property.
         /// Derived objects should override this for construction instead of using the constructor.
-        /// In the constructor, the object only exists as an empty shell not associated with anything.
-        /// The danger is that any trigger to access the same object will cause a recursion situation (and thus a stack overflow error).
+        /// In the constructor, the object only exists as an empty shell.
         /// It's ok to setup non-v8 values in constructors, but be careful not to trigger any calls into the V8Engine itself.
+        /// <para>Note: Because this method is virtual, it does not guarantee that 'IsInitialized' will be considered.  Implementations should check against
+        /// the 'IsInitilized' property.</para>
         /// </summary>
-        public virtual void Initialize() { }
-
-        ~V8NativeObject()
+        public virtual void Initialize()
         {
-            Engine.Finalize(this);
+            if (_Proxy != this && !IsInitilized)
+                _Proxy.Initialize(this);
+
+            IsInitilized = true;
         }
 
         /// <summary>
-        /// Called when there are no more handles and the object is ready to be disposed.
-        /// You should always override this if you need to dispose of any native resources yourself.
-        /// DO NOT rely on the destructor (finalizer).
-        /// <para>Note: This can be called from the finalizer thread (indirectly through V8.NET), in which case
-        /// 'GC.SuppressFinalize()' will be called automatically upon return.</para>
+        /// (Exists only to support the 'IV8NativeInterface' interface and should not be called directly - call 'Initialize()' instead.)
         /// </summary>
-        public virtual void Dispose() { }
-
-        // --------------------------------------------------------------------------------------------------------------------
-
-        public static implicit operator InternalHandle(V8NativeObject obj) { return obj != null ? obj.Handle : InternalHandle.Empty; }
-
-        // --------------------------------------------------------------------------------------------------------------------
-        // DynamicObject support is in .NET 4.0 and higher
-
-#if V2 || V3 || V3_5
-#else
-
-        public override IEnumerable<string> GetDynamicMemberNames()
+        public void Initialize(V8NativeObject owner)
         {
-            return GetPropertyNames();
+            if (!IsInitilized)
+                Initialize();
         }
 
-        public override bool TryGetMember(GetMemberBinder binder, out object result)
+        /// <summary>
+        /// This is called on the GC finalizer thread to flag that this managed object entry can be collected.
+        /// <para>Note: There are no longer any managed references to the object at this point; HOWEVER, there may still be NATIVE ones.
+        /// This means the object may survive this process, at which point it's up to the worker thread to clean it up when the native V8 GC is ready.</para>
+        /// </summary>
+        ~V8NativeObject()
         {
-            var handle = GetProperty(binder.Name);
-            if (handle.HasManagedObject)
-                result = handle.ManagedObject; // (for objects, return the instance instead of a value handle)
-            else
-                result = handle.Value;
-            return !handle.IsUndefined;
+            if (_ID != null)
+                lock (Engine._Objects)
+                {
+                    Engine._Objects[_ID.Value].DoFinalize(this); // (will re-register this object for finalization)
+                    // (the native GC has not reported we can remove this yet, so just flag the collection attempt [note: if 'Engine._Objects[_ID.Value].CanCollect' is true here, then finalize will succeed])
+                }
+
+            if (_Handle._IsWeakHandle) // (a handle is weak when there is only one reference [itself], which means this object is ready for the worker)
+                _TryDisposeNativeHandle();
         }
 
-        public override bool TrySetMember(SetMemberBinder binder, object value)
+        /// <summary>
+        /// Called when there are no more references (on either the managed or native side) and the object is ready to be deleted from the V8.NET system.
+        /// You should never call this from code directly unless you need to force the release of native resources associated with a custom implementation
+        /// (and if so, a custom internal flag should be kept indicating whether or not the resources have been disposed).
+        /// You should always override/implement this if you need to dispose of any native resources in custom implementations.
+        /// DO NOT rely on the destructor (finalizer) - the object can still survive it.
+        /// <para>Note: This can be triggered either by the worker thread, or on the call-back from the V8 garbage collector.  In either case, tread it as if
+        /// it was called from the GC finalizer (not on the main thread).</para>
+        /// *** If overriding, DON'T call back to this method, otherwise it will call back and end up in a cyclical call (and a stack overflow!). ***
+        /// </summary>
+        public virtual void Dispose()
         {
-            var propertyName = binder.Name;
-
-            InternalHandle _value = null;
-
-            if (value is Handle)
-                _value = (InternalHandle)value; // (objects are detected and added directly! ;))
-            if (value is InternalHandle)
-                _value = (InternalHandle)value;
-            else if (value is InternalHandle)
-                _value = (InternalHandle)value;
-            else if (value is IV8NativeObject)
-                _value = ((IV8NativeObject)value).Handle; // (objects are detected and added directly! ;))
-            else if (value is IJSProperty)
-                _value = ((IJSProperty)value).Value; // (IJSProperty values are detected and set directly! ;))
-            else
-                _value = Engine.CreateNativeValue(value);
-
-            return SetProperty(propertyName, _value);
+            if (_Proxy != this) _Proxy.Dispose();
         }
 
-        public override bool TryDeleteMember(DeleteMemberBinder binder)
+        /// <summary>
+        /// This is called automatically when both the handle AND reference for the managed object are weak [no longer in use], in which case this object
+        /// info instance is ready to be removed.
+        /// </summary>
+        internal void _TryDisposeNativeHandle()
         {
-            return DeleteProperty(binder.Name);
-        }
-
-        public override bool TryGetIndex(GetIndexBinder binder, object[] indexes, out object result)
-        {
-            result = null;
-
-            if (indexes.Length == 1)
+            if (IsManagedObjectWeak && (_Handle.IsEmpty || _Handle._IsWeakHandle && !_Handle._IsInPendingDisposalQueue))
             {
-                var o = indexes[0];
-                InternalHandle valueHandle = null;
+                _Handle._IsInPendingDisposalQueue = true; // (this also helps to make sure this method isn't called again)
 
-                if (o is Int16 || o is Int32 || o is Int64) // TODO: Test this.
-                    valueHandle = GetProperty((Int32)o);
-                else if (o != null)
-                    valueHandle = GetProperty(o.ToString());
+                if ((Template == null || !(this is V8ManagedObject) && !(this is V8Function)) && !Engine._HasAccessors(_Handle)) // ('V8NativeObject' type objects don't have callbacks, but they might have accessors!)
+                    _OnNativeGCRequested();
+                else if (Template is ObjectTemplate && !((ObjectTemplate)Template).PropertyInterceptorsRegistered) // (no callback will occur if there are no interceptors, so just delete the entry now)
+                    _OnNativeGCRequested();
+                else if (_ID != null)
+                    lock (_Engine._WeakObjects)
+                    {
+                        _Engine._WeakObjects.Add(_ID.Value); // (queue on the worker to set a native weak reference to dispose of this object later when the native GC is ready)
+                    }
+            }
+        }
 
-                if (valueHandle != null)
-                    result = valueHandle.Value;
+        /// <summary>
+        /// Called by the worker thread to make the native handle weak.  Once the native GC attempts to collect the underlying native object, then
+        /// '_OnNativeGCRequested()' will get called to finalize the disposal of the managed object.
+        /// </summary>
+        internal void _MakeWeak()
+        {
+            V8NetProxy.MakeWeakHandle(_Handle);
+            // (once the native V8 engine agrees, this instance will be removed due to a global GC callback registered when the engine was created)
+        }
+
+        internal bool _OnNativeGCRequested() // WARNING: The worker thread may trigger a V8 GC callback in its own thread!
+        {
+            lock (_Engine._Objects)
+            {
+                if (Template is FunctionTemplate)
+                    ((FunctionTemplate)Template)._RemoveFunctionType(ID);// (make sure to remove the function references from the template instance)
+
+                Dispose(); // (notify any custom dispose methods to clean up)
+
+                GC.SuppressFinalize(this); // (required otherwise the object's finalizer will be triggered again)
+
+                _Handle.Dispose(); // (note: this may already be disposed, in which case this call does nothing)
+
+                Engine._ClearAccessors(_Handle); // (just to be sure - accessors are no longer needed once the native handle is GC'd)
+
+                Template = null;
+
+                if (_ID != null)
+                    _Engine._RemoveObjectWeakReference(_ID.Value);
+                _Handle.ObjectID = -1;
             }
 
-            return false;
+            return true; // ("true" means to "continue disposal of native handle" [if not already empty])
         }
 
+        // --------------------------------------------------------------------------------------------------------------------
+
+        public static implicit operator InternalHandle(V8NativeObject obj) { return obj != null ? obj._Handle._Handle : InternalHandle.Empty; }
+        public static implicit operator Handle(V8NativeObject obj) { return obj != null ? obj._Handle : ObjectHandle.Empty; }
+        public static implicit operator ObjectHandle(V8NativeObject obj) { return obj != null ? obj._Handle : ObjectHandle.Empty; }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        public override string ToString()
+        {
+            var objText = _Proxy.GetType().Name;
+            var disposeText = _Handle.IsDisposed ? "Yes" : "No";
+            return objText + " (ID: " + (_ID ?? -1) + " / Value: '" + _Handle + "' / Is Disposed?: " + disposeText + ")";
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+#if !(V1_1 || V2 || V3 || V3_5)
+        public DynamicMetaObject GetMetaObject(Expression parameter)
+        {
+            return new DynamicHandle(this, parameter);
+        }
 #endif
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Calls the V8 'Set()' function on the underlying native object.
-        /// Return true if successful.
+        /// Returns true if successful.
         /// </summary>
         public virtual bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None)
         {
-            try
-            {
-                return V8NetProxy.SetObjectPropertyByName(Handle, name, value, attributes);
-            }
-            finally
-            {
-                value._DisposeIfFirst();
-            }
+            return _Handle._Handle.SetProperty(name, value, attributes);
         }
 
         /// <summary>
         /// Calls the V8 'Set()' function on the underlying native object.
-        /// Return true if successful.
+        /// Returns true if successful.
         /// </summary>
         public virtual bool SetProperty(Int32 index, InternalHandle value)
         {
-            try
-            {
-                return V8NetProxy.SetObjectPropertyByIndex(Handle, index, value);
-            }
-            finally
-            {
-                value._DisposeIfFirst();
-            }
+            return _Handle._Handle.SetProperty(index, value);
         }
+
+        /// <summary>
+        /// Sets a property to a given object. If the object is not V8.NET related, then the system will attempt to bind the instance and all public members to
+        /// the specified property name.
+        /// Returns true if successful.
+        /// </summary>
+        /// <param name="name">The property name.</param>
+        /// <param name="obj">Some value or object instance. 'Engine.CreateValue()' will be used to convert value types.</param>
+        /// <param name="recursive">For object types, if true, then nested objects are included, otherwise only the object itself is bound and returned.</param>
+        /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
+        public bool SetProperty(string name, object obj, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+        {
+            return _Handle._Handle.SetProperty(name, obj, recursive, attributes);
+        }
+
+        /// <summary>
+        /// Binds a 'V8Function' object to the specified type and associates the type name (or custom script name) with the underlying object.
+        /// Returns true if successful.
+        /// </summary>
+        /// <param name="type">The type to wrap.</param>
+        /// <param name="customScriptName">A custom type name, or 'null' to use the type name as is (the default).</param>
+        /// <param name="recursive">If true, then nested objects are wrapped as properties are accessed, otherwise only the object itself is bound when created.</param>
+        /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
+        public bool SetProperty(Type type, string customScriptName = null, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+        {
+            return _Handle._Handle.SetProperty(type, customScriptName, recursive, attributes);
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Calls the V8 'Get()' function on the underlying native object.
@@ -338,7 +357,7 @@ namespace V8.Net
         /// </summary>
         public virtual InternalHandle GetProperty(string name)
         {
-            return V8NetProxy.GetObjectPropertyByName(Handle, name);
+            return _Handle._Handle.GetProperty(name);
         }
 
         /// <summary>
@@ -347,8 +366,10 @@ namespace V8.Net
         /// </summary>
         public virtual InternalHandle GetProperty(Int32 index)
         {
-            return V8NetProxy.GetObjectPropertyByIndex(Handle, index);
+            return _Handle._Handle.GetProperty(index);
         }
+
+        // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Calls the V8 'Delete()' function on the underlying native object.
@@ -356,7 +377,7 @@ namespace V8.Net
         /// </summary>
         public virtual bool DeleteProperty(string name)
         {
-            return V8NetProxy.DeleteObjectPropertyByName(Handle, name);
+            return _Handle._Handle.GetProperty(name);
         }
 
         /// <summary>
@@ -365,7 +386,7 @@ namespace V8.Net
         /// </summary>
         public virtual bool DeleteProperty(Int32 index)
         {
-            return V8NetProxy.DeleteObjectPropertyByIndex(Handle, index);
+            return _Handle._Handle.GetProperty(index);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -375,19 +396,9 @@ namespace V8.Net
         /// </summary>
         public void SetAccessor(string name,
             V8NativeObjectPropertyGetter getter, V8NativeObjectPropertySetter setter,
-            V8AccessControl access, V8PropertyAttributes attributes)
+            V8PropertyAttributes attributes = V8PropertyAttributes.None, V8AccessControl access = V8AccessControl.Default)
         {
-            V8NetProxy.SetObjectAccessor(Handle, ID, name,
-                   (HandleProxy* _this, string propertyName) =>
-                   {
-                       using (InternalHandle hThis = _this) { return getter != null ? getter(hThis, propertyName) : null; }
-                   },
-                   (HandleProxy* _this, string propertyName, HandleProxy* value) =>
-                   {
-                       if (setter != null)
-                           using (InternalHandle hThis = _this) { setter(hThis, propertyName, value); }
-                   },
-                   access, attributes);
+            _Handle._Handle.SetAccessor(name, getter, setter, attributes, access);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -397,22 +408,7 @@ namespace V8.Net
         /// </summary>
         public string[] GetPropertyNames()
         {
-            using (InternalHandle v8array = V8NetProxy.GetPropertyNames(Handle))
-            {
-                var length = V8NetProxy.GetArrayLength(v8array);
-
-                var names = new string[length];
-
-                InternalHandle itemHandle;
-
-                for (var i = 0; i < length; i++)
-                    using (itemHandle = V8NetProxy.GetObjectPropertyByIndex(v8array, i))
-                    {
-                        names[i] = itemHandle;
-                    }
-
-                return names;
-            }
+            return _Handle._Handle.GetPropertyNames();
         }
 
         /// <summary>
@@ -420,22 +416,7 @@ namespace V8.Net
         /// </summary>
         public virtual string[] GetOwnPropertyNames()
         {
-            using (InternalHandle v8array = V8NetProxy.GetOwnPropertyNames(Handle))
-            {
-                var length = V8NetProxy.GetArrayLength(v8array);
-
-                var names = new string[length];
-
-                InternalHandle itemHandle;
-
-                for (var i = 0; i < length; i++)
-                    using (itemHandle = V8NetProxy.GetObjectPropertyByIndex(v8array, i))
-                    {
-                        names[i] = itemHandle;
-                    }
-
-                return names;
-            }
+            return _Handle._Handle.GetOwnPropertyNames();
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -447,7 +428,7 @@ namespace V8.Net
         /// </summary>
         public V8PropertyAttributes GetPropertyAttributes(string name)
         {
-            return V8NetProxy.GetPropertyAttributes(Handle, name);
+            return _Handle._Handle.GetPropertyAttributes(name);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -459,20 +440,7 @@ namespace V8.Net
         /// </summary>
         public virtual InternalHandle Call(string functionName, InternalHandle _this, params InternalHandle[] args)
         {
-            try
-            {
-                HandleProxy** nativeArrayMem = Utilities.MakeHandleProxyArray(args);
-
-                var result = V8NetProxy.Call(Handle, functionName, _this, args.Length, nativeArrayMem);
-
-                Utilities.FreeNativeMemory((IntPtr)nativeArrayMem);
-
-                return result;
-            }
-            finally
-            {
-                _this._DisposeIfFirst();
-            }
+            return _Handle._Handle.Call(functionName, _this, args);
         }
 
         /// <summary>
@@ -481,23 +449,30 @@ namespace V8.Net
         /// </summary>
         public InternalHandle Call(string functionName, params InternalHandle[] args)
         {
-            return Call(functionName, InternalHandle.Empty, args);
+            return _Handle._Handle.Call(functionName, args);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
     }
 
-    /// <summary>
-    /// Intercepts JavaScript access for properties on the associated JavaScript object for retrieving a value.
-    /// <para>To allow the V8 engine to perform the default get action, return "Handle.Empty".</para>
-    /// </summary>
-    public delegate InternalHandle V8NativeObjectPropertyGetter(InternalHandle _this, string propertyName);
+    // ========================================================================================================================
 
     /// <summary>
-    /// Intercepts JavaScript access for properties on the associated JavaScript object for setting values.
-    /// <para>To allow the V8 engine to perform the default set action, return "Handle.Empty".</para>
+    /// This generic version of 'V8NativeObject' allows injecting your own class by implementing the 'IV8NativeObject' interface.
     /// </summary>
-    public delegate void V8NativeObjectPropertySetter(InternalHandle _this, string propertyName, InternalHandle value);
+    /// <typeparam name="T">Your own class, which implements the 'IV8NativeObject' interface.  Don't use the generic version if you are able to inherit from 'V8NativeObject' instead.</typeparam>
+    public unsafe class V8NativeObject<T> : V8NativeObject
+        where T : IV8NativeObject, new()
+    {
+        // --------------------------------------------------------------------------------------------------------------------
+
+        public V8NativeObject()
+            : base(new T())
+        {
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+    }
 
     // ========================================================================================================================
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +10,7 @@ namespace V8.Net
     /// Implements a way to store managed objects which can be tracked by index for quick lookup.
     /// <param>Note: The indexes are similar to native pointers, and thus, an index is REQUIRED in order to retrieve or remove a reference.</param>
     /// </summary>
-    public class IndexedObjectList<T> where T : class
+    public class IndexedObjectList<T> : IEnumerable<T> where T : class
     {
         struct _ObjectItem { public T Object; public int ValidObjectIndex; }
         struct _ValidObjectItem { public T Object; public int ObjectIndex; } // ('ObjectIndex' is a "link-back" to allow fast swapping of valid object items when an object item is removed.)
@@ -173,5 +174,15 @@ namespace V8.Net
         /// Clears the internal lists and resets them to default initial capacity.
         /// </summary>
         public void Clear() { _Objects.Clear(); _ValidObjects.Clear(); _UnusedIndexes.Clear(); }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            return Objects.GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return Objects.GetEnumerator();
+        }
     }
 }

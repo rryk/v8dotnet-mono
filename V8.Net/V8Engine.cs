@@ -4,6 +4,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -62,14 +63,11 @@ namespace V8.Net
 
         ObjectTemplate _GlobalObjectTemplateProxy;
 
-        public IV8NativeObject GlobalObject { get { return _GlobalObject; } }
-        IV8NativeObject _GlobalObject;
-#if V2 || V3 || V3_5
-#else
-        public dynamic DynamicGlobalObject { get { return _GlobalObject.DynamicObject; } }
-#endif
+        public ObjectHandle GlobalObject { get; private set; }
 
-        internal readonly IndexedObjectList<FunctionTemplate> _FunctionTemplates = new IndexedObjectList<FunctionTemplate>();
+#if !(V1_1 || V2 || V3 || V3_5)
+        public dynamic DynamicGlobalObject { get { return GlobalObject; } }
+#endif
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -154,10 +152,7 @@ namespace V8.Net
                 {
                     _GlobalObjectTemplateProxy = CreateObjectTemplate<ObjectTemplate>();
                     _GlobalObjectTemplateProxy.UnregisterPropertyInterceptors(); // (it's much faster to use a native object for the global scope)
-                    InternalHandle hObject = V8NetProxy.SetGlobalObjectTemplate(_NativeV8EngineProxy, _GlobalObjectTemplateProxy._NativeObjectTemplateProxy); // (returns the global object handle)
-                    var objInfo = _CreateManagedObject<V8NativeObject>(_GlobalObjectTemplateProxy, hObject);
-                    _GlobalObject = (IV8NativeObject)objInfo.ManagedObject;
-                    objInfo.Initialize(); // (not really necessary, but just to keep consistency)
+                    GlobalObject = V8NetProxy.SetGlobalObjectTemplate(_NativeV8EngineProxy, _GlobalObjectTemplateProxy._NativeObjectTemplateProxy); // (returns the global object handle)
                 };
             }
 
@@ -209,8 +204,12 @@ namespace V8.Net
             {
                 lock (_Objects)
                 {
-                    var objInfo = _Objects[persistedObjectHandle->_ManagedObjectID];
-                    if (objInfo != null) return objInfo._OnNativeGCRequested(); // (notify the handle that a V8 GC is requested)
+                    var weakRef = _Objects[persistedObjectHandle->_ManagedObjectID];
+                    if (weakRef != null)
+                    {
+                        var obj = weakRef.Object;
+                        if (obj != null) return obj._OnNativeGCRequested(); // (notify the object that a V8 GC is requested)
+                    }
                 }
             }
             return true; // (the managed handle doesn't exist, so go ahead and dispose of the native one [the proxy handle])
@@ -243,11 +242,11 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Executes JavaScript on the V8 engine.
+        /// Executes JavaScript on the V8 engine and returns the result.
         /// </summary>
         /// <param name="script">The script to run.</param>
         /// <param name="sourceName">A string that identifies the source of the script (handy for debug purposes).</param>
-        /// <param name="throwExceptionOnError">If true and the return value represents an error, an exception is thrown (default is 'false').</param>
+        /// <param name="throwExceptionOnError">If true, and the return value represents an error, an exception is thrown (default is 'false').</param>
         public Handle Execute(string script, string sourceName = "V8.NET", bool throwExceptionOnError = false)
         {
             Handle result = V8NetProxy.V8Execute(_NativeV8EngineProxy, script, sourceName);
@@ -265,10 +264,36 @@ namespace V8.Net
         /// </summary>
         /// <param name="script">The script to run.</param>
         /// <param name="sourceName">A string that identifies the source of the script (handy for debug purposes).</param>
-        /// <param name="throwExceptionOnError">If true and the return value represents an error, an exception is thrown (default is 'false').</param>
+        /// <param name="throwExceptionOnError">If true, and the return value represents an error, an exception is thrown (default is 'false').</param>
         public void ConsoleExecute(string script, string sourceName = "V8.NET", bool throwExceptionOnError = false)
         {
             Console.WriteLine(Execute(script, sourceName, throwExceptionOnError).AsString);
+        }
+
+        /// <summary>
+        /// Loads a JavaScript file from the current working directory (or specified absolute path) and executes it in the V8 engine, then returns the result.
+        /// </summary>
+        /// <param name="scriptFile">The script file to load.</param>
+        /// <param name="sourceName">A string that identifies the source of the script (handy for debug purposes).</param>
+        /// <param name="throwExceptionOnError">If true, and the return value represents an error, or the file fails to load, an exception is thrown (default is 'false').</param>
+        public Handle LoadScript(string scriptFile, string sourceName = "V8.NET", bool throwExceptionOnError = false)
+        {
+            Handle result;
+            try
+            {
+                var jsText = File.ReadAllText(scriptFile);
+                result = Execute(jsText, sourceName, throwExceptionOnError);
+                if (throwExceptionOnError)
+                    result.ThrowOnError();
+            }
+            catch (Exception ex)
+            {
+                if (throwExceptionOnError)
+                    throw ex;
+                result = CreateValue(Exceptions.GetFullErrorMessage(ex));
+                result._Handle._HandleProxy->_ValueType = JSValueType.InternalError; // (required to flag that an error has occurred)
+            }
+            return result;
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -324,36 +349,57 @@ namespace V8.Net
         /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
         /// It's ok to use 'WithHandleScope' with this method.
         /// </summary>
-        public InternalHandle CreateBoolean(bool b) { return V8NetProxy.CreateBoolean(_NativeV8EngineProxy, b); }
+        public InternalHandle CreateValue(bool b) { return V8NetProxy.CreateBoolean(_NativeV8EngineProxy, b); }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a 32-bit integer for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreateInteger(Int32 num) { return V8NetProxy.CreateInteger(_NativeV8EngineProxy, num); }
+        public InternalHandle CreateValue(Int32 num) { return V8NetProxy.CreateInteger(_NativeV8EngineProxy, num); }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a 64-bit number (double) for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreateNumber(double num) { return V8NetProxy.CreateNumber(_NativeV8EngineProxy, num); }
+        public InternalHandle CreateValue(double num) { return V8NetProxy.CreateNumber(_NativeV8EngineProxy, num); }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a string for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreateString(string str) { return V8NetProxy.CreateString(_NativeV8EngineProxy, str); }
+        public InternalHandle CreateValue(string str) { return V8NetProxy.CreateString(_NativeV8EngineProxy, str); }
+
+        /// <summary>
+        /// Calls the native V8 proxy library to create an error string for use within the V8 JavaScript environment.
+        /// <para>Note: The error flag exists in the associated proxy object only.  If the handle is passed along to another operation, only the string message will get passed.</para>
+        /// </summary>
+        public InternalHandle CreateError(string message, JSValueType errorType)
+        {
+            if (errorType >= 0) throw new InvalidOperationException("Invalid error type.");
+            return V8NetProxy.CreateError(_NativeV8EngineProxy, message, errorType);
+        }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a date for use within the V8 JavaScript environment.
         /// </summary>
         /// <param name="ms">The number of milliseconds since epoch (Jan 1, 1970). This is the same value as 'SomeDate.getTime()' in JavaScript.</param>
-        public InternalHandle CreateDate(double ms) { return V8NetProxy.CreateDate(_NativeV8EngineProxy, ms); }
+        public InternalHandle CreateValue(TimeSpan ms) { return V8NetProxy.CreateDate(_NativeV8EngineProxy, ms.TotalMilliseconds); }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a date for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreateDate(DateTime date) { return CreateDate(date.ToUniversalTime().Subtract(Epoch).TotalMilliseconds); }
+        public InternalHandle CreateValue(DateTime date) { return CreateValue(date.ToUniversalTime().Subtract(Epoch)); }
 
+        /// <summary>
+        /// Wraps a given object handle with a managed object, and optionally associates it with a template instance.
+        /// <para>Note: Any other managed object associated with the given handle will cause an error.
+        /// You should check '{Handle}.HasManagedObject', or use the "GetObject()" methods to make sure a managed object doesn't already exist.</para>
+        /// <para>This was method exists to support the following cases: 1. The V8 context auto-generates the global object, and
+        /// 2. V8 function objects are not generated from templates, but still need a managed wrapper.</para>
+        /// <para>Note: </para>
+        /// </summary>
+        /// <typeparam name="T">The wrapper type to create (such as V8ManagedObject).</typeparam>
+        /// <param name="v8Object">A handle to a native V8 object.</param>
+        /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
         internal T _CreateObject<T>(ITemplate template, InternalHandle v8Object, bool initialize = true, bool connectNativeObject = true)
-            where T : class, IV8NativeObject, new()
+            where T : V8NativeObject, new()
         {
             try
             {
@@ -361,13 +407,12 @@ namespace V8.Net
                     throw new InvalidOperationException("An object handle type is required (such as a JavaScript object or function handle).");
 
                 // ... create the new managed JavaScript object, store it (to get the "ID"), and connect it to the native V8 object ...
-                var objInfo = _CreateManagedObject<T>(template, v8Object.PassOn(), connectNativeObject);
-                v8Object._First = false; // (first is only valid if the handle is not passed on)
+                var obj = _CreateManagedObject<T>(template, v8Object.PassOn(), connectNativeObject);
 
                 if (initialize)
-                    objInfo.Initialize();
+                    obj.Initialize();
 
-                return (T)objInfo.ManagedObject;
+                return obj;
             }
             finally
             {
@@ -377,9 +422,9 @@ namespace V8.Net
 
         /// <summary>
         /// Wraps a given object handle with a managed object.
-        /// <para>Note: Any other managed object associated with the native V8 object represented by the given handle will point to this new object instead.
-        /// You should use the "GetObject()" methods to make sure a managed object doesn't already exist.</para>
-        /// <para>This was method exists to support the following issues: 1. The V8 context auto-generates the global object, and needs to later be associated to a managed object.
+        /// <para>Note: Any other managed object associated with the given handle will cause an error.
+        /// You should check '{Handle}.HasManagedObject', or use the "GetObject()" methods to make sure a managed object doesn't already exist.</para>
+        /// <para>This was method exists to support the following cases: 1. The V8 context auto-generates the global object, and
         /// 2. V8 function objects are not generated from templates, but still need a managed wrapper.</para>
         /// <para>Note: </para>
         /// </summary>
@@ -387,7 +432,7 @@ namespace V8.Net
         /// <param name="v8Object">A handle to a native V8 object.</param>
         /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
         public T CreateObject<T>(InternalHandle v8Object, bool initialize = true)
-            where T : class, IV8NativeObject, new()
+            where T : V8NativeObject, new()
         {
             return _CreateObject<T>(null, v8Object, initialize);
         }
@@ -401,17 +446,17 @@ namespace V8.Net
         /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
         /// </summary>
         /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
+        /// <typeparam name="T">A custom 'V8NativeObject' type, or just use 'V8NativeObject' as a default.</typeparam>
         public T CreateObject<T>(bool initialize = true)
-            where T : class, IV8NativeObject, new()
+            where T : V8NativeObject, new()
         {
             // ... create the new managed JavaScript object and store it (to get the "ID")...
-            var objInfo = _CreateManagedObject<T>(null, null);
+            var obj = _CreateManagedObject<T>(null, null);
 
             try
             {
-                // ... create an new native object and associated it with the new managed object ID ...
-                objInfo._Handle.Set(V8NetProxy.CreateObject(_NativeV8EngineProxy, objInfo._ID));
-                objInfo._Handle._First = false; // (the first flag is set on the first handle created internally for end user protection, and thus is not valid in this case)
+                // ... create a new native object and associated it with the new managed object ID ...
+                obj._Handle._Set(V8NetProxy.CreateObject(_NativeV8EngineProxy, obj.ID));
 
                 /* The V8 object will have an associated internal field set to the index of the created managed object above for quick lookup.  This index is used
                  * to locate the associated managed object when a call-back occurs. The lookup is a fast O(1) operation using the custom 'IndexedObjectList' manager.
@@ -420,22 +465,26 @@ namespace V8.Net
             catch (Exception ex)
             {
                 // ... something went wrong, so remove the new managed object ...
-                _Objects.Remove(objInfo._ID);
+                _RemoveObjectWeakReference(obj.ID);
                 throw ex;
             }
 
             if (initialize)
-                objInfo.Initialize();
+                obj.Initialize();
 
-            return (T)objInfo.ManagedObject;
+            return (T)obj;
         }
 
+        /// <summary>
+        /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
+        /// </summary>
+        /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
         public V8NativeObject CreateObject(bool initialize = true) { return CreateObject<V8NativeObject>(initialize); }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a JavaScript array for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreatArray(params InternalHandle[] items)
+        public InternalHandle CreateValue(params InternalHandle[] items)
         {
             HandleProxy** nativeArrayMem = items.Length > 0 ? Utilities.MakeHandleProxyArray(items) : null;
 
@@ -447,10 +496,27 @@ namespace V8.Net
         }
 
         /// <summary>
-        /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
-        /// <para>This overload provides a quick way to construct an array of strings.  One big memory block is created to marshal the given strings at one time.</para>
+        /// Converts an enumeration of values (usually from a collection, list, or array) into a JavaScript array.
+        /// By default, an exception will occur if any type cannot be converted.
         /// </summary>
-        public InternalHandle CreatArray(IEnumerable<string> items = null)
+        /// <param name="enumerable">An enumerable object to convert into a native V8 array.</param>
+        /// <returns>A native V8 array.</returns>
+        public InternalHandle CreateValue(IEnumerable enumerable, bool ignoreErrors = false)
+        {
+            var values = (enumerable).Cast<object>().ToArray();
+            InternalHandle[] handles = new InternalHandle[values.Length];
+            for (var i = 0; i < values.Length; i++)
+                try { handles[i] = CreateValue(values[i]); }
+                catch (Exception ex) { if (!ignoreErrors) throw ex; }
+            return CreateValue(handles);
+        }
+
+        /// <summary>
+        /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
+        /// <para>This overload provides a *quick way* to construct an array of strings.
+        /// One big memory block is created to marshal the given strings at one time, which is many times faster than having to create an array of individual native strings.</para>
+        /// </summary>
+        public InternalHandle CreateValue(IEnumerable<string> items = null)
         {
             if (items == null) return V8NetProxy.CreateArray(_NativeV8EngineProxy, null, 0);
 
@@ -495,39 +561,75 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
+        /// Simply creates and returns a 'null' JavaScript value.
+        /// </summary>
+        public InternalHandle CreateNullValue() { return V8NetProxy.CreateNullValue(_NativeV8EngineProxy); }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
         /// Creates a native V8 JavaScript value that the best represents the given managed value.
+        /// Object instance values will be bound to a 'V8NativeObject' wrapper and returned.
+        /// To include implicit wrapping of object-type fields and properties for object instances, set 'recursive' to true, otherwise they will be skipped.
         /// <para>Warning: Integers are 32-bit, and Numbers (double) are 64-bit.  This means converting 64-bit integers may result in data loss.</para>
         /// </summary>
         /// <param name="value">One of the supported value types: bool, byte, Int16-64, Single, float, double, string, char, StringBuilder, DateTime, or TimeSpan. (Warning: Int64 will be converted to Int32 [possible data loss])</param>
+        /// <param name="recursive">If true, and 'value' is an object type, then nested objects are bound as well, otherwise only non-object type properties are bound.
+        /// <para>For security reasons, object-type fields and properties are ignored by default ('recursive' is false).</para>
+        /// </param>
         /// <returns>A native value that best represents the given managed value.</returns>
-        public unsafe InternalHandle CreateNativeValue(object value)
+        public InternalHandle CreateValue(object value, bool recursive = false)
         {
-            if (value is bool)
-                return CreateBoolean((bool)value);
-            else if (value is Byte)
-                return CreateInteger((Int32)(byte)value);
+            if (value == null)
+                return CreateNullValue();
+            else if (value is InternalHandle)
+                return (InternalHandle)value; // (already a V8.NET value!)
+            else if (value is Handle)
+                return (Handle)value; // (already a V8.NET value!)
+            else if (value is V8NativeObject)
+                return ((V8NativeObject)value)._Handle._Handle; // (already a V8.NET value!)
+            else if (value is IJSProperty)
+                return ((IJSProperty)value).Value;
+            else if (value is bool)
+                return CreateValue((bool)value);
+            else if (value is byte)
+                return CreateValue((Int32)(byte)value);
+            else if (value is sbyte)
+                return CreateValue((Int32)(sbyte)value);
             else if (value is Int16)
-                return CreateInteger((Int32)(Int16)value);
+                return CreateValue((Int32)(Int16)value);
+            else if (value is UInt16)
+                return CreateValue((Int32)(UInt16)value);
             else if (value is Int32)
-                return CreateInteger((Int32)value);
+                return CreateValue((Int32)value);
+            else if (value is UInt32)
+                return CreateValue((double)(UInt32)value);
             else if (value is Int64)
-                return CreateNumber((double)(Int64)value); // (warning: data loss may occur when converting 64int->64float)
+                return CreateValue((double)(Int64)value); // (warning: data loss may occur when converting 64int->64float)
+            else if (value is UInt64)
+                return CreateValue((double)(UInt64)value); // (warning: data loss may occur when converting 64int->64float)
             else if (value is Single)
-                return CreateNumber((double)(Single)value);
+                return CreateValue((double)(Single)value);
             else if (value is float)
-                return CreateNumber((double)(float)value);
+                return CreateValue((double)(float)value);
             else if (value is double)
-                return CreateNumber((double)value);
+                return CreateValue((double)value);
             else if (value is string)
-                return CreateString((string)value);
+                return CreateValue((string)value);
             else if (value is char)
-                return CreateString(((char)value).ToString());
+                return CreateValue(((char)value).ToString());
             else if (value is StringBuilder)
-                return CreateString(((StringBuilder)value).ToString());
+                return CreateValue(((StringBuilder)value).ToString());
             else if (value is DateTime)
-                return CreateDate((DateTime)value);
+                return CreateValue((DateTime)value);
             else if (value is TimeSpan)
-                return CreateDate(((TimeSpan)value).TotalMilliseconds);
+                return CreateValue((TimeSpan)value);
+            else if (value is IEnumerable) // (includes arrays, lists, collections, and related)
+                return CreateValue((IEnumerable)value);
+            else if (value is Enum) // (enums are simply integer like values)
+                return CreateValue((int)value); // TODO: Test enum conversion
+            else if (value.GetType().IsClass)
+                return CreateBinding(value, recursive);
 
             var type = value != null ? value.GetType().Name : "null";
             throw new NotSupportedException("Cannot convert object of type '" + type + "' to a JavaScript value.");

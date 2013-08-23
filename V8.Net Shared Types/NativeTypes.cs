@@ -6,7 +6,6 @@ using System.Text;
 
 namespace V8.Net
 {
-    //_
     // ========================================================================================================================
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -208,7 +207,7 @@ namespace V8.Net
     /// Otherwise, returns an empty handle.
     /// </summary>
     [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode)]
-    public unsafe delegate void ManagedAccessorSetter(HandleProxy* _this, string propertyName, HandleProxy* value);
+    public unsafe delegate HandleProxy* ManagedAccessorSetter(HandleProxy* _this, string propertyName, HandleProxy* value);
 
     /// <summary>
     /// Returns the value if the setter intercepts the request.

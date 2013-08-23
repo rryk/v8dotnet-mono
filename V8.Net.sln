@@ -16,8 +16,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "V8.Net", "V8.Net\V8.Net.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "V8.Net Shared Types", "V8.Net Shared Types\V8.Net Shared Types.csproj", "{EF90724B-3893-4ACF-BFEE-88532485B11A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "V8.Net Tests", "V8.Net Tests\V8.Net Tests.csproj", "{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "V8.Net Proxy x86", "V8.NET Proxy\V8.Net Proxy.vcxproj", "{8BFB50C4-51E7-4DA4-873B-B79F123A9723}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "V8.Net Proxy Interface", "V8.NET Proxy Interface\V8.Net Proxy Interface.csproj", "{81752B54-1391-44CB-A1F5-ECCF7279DB71}"
@@ -58,7 +56,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "V8.Net Shared Types - 3.5",
 EndProject
 Global
 	GlobalSection(TeamFoundationVersionControl) = preSolution
-		SccNumberOfProjects = 15
+		SccNumberOfProjects = 14
 		SccEnterpriseProvider = {4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}
 		SccTeamFoundationServer = https://tfs.codeplex.com/tfs/tfs23
 		SccLocalPath0 = .
@@ -74,50 +72,46 @@ Global
 		SccProjectTopLevelParentUniqueName3 = V8.Net.sln
 		SccProjectName3 = V8.Net\u0020Shared\u0020Types
 		SccLocalPath3 = V8.Net\u0020Shared\u0020Types
-		SccProjectUniqueName4 = V8.Net\u0020Tests\\V8.Net\u0020Tests.csproj
+		SccProjectUniqueName4 = V8.NET\u0020Proxy\\V8.Net\u0020Proxy.vcxproj
 		SccProjectTopLevelParentUniqueName4 = V8.Net.sln
-		SccProjectName4 = V8.Net\u0020Tests
-		SccLocalPath4 = V8.Net\u0020Tests
-		SccProjectUniqueName5 = V8.NET\u0020Proxy\\V8.Net\u0020Proxy.vcxproj
+		SccProjectName4 = V8.NET\u0020Proxy
+		SccLocalPath4 = V8.NET\u0020Proxy
+		SccProjectUniqueName5 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x64.csproj
 		SccProjectTopLevelParentUniqueName5 = V8.Net.sln
-		SccProjectName5 = V8.NET\u0020Proxy
-		SccLocalPath5 = V8.NET\u0020Proxy
-		SccProjectUniqueName6 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x64.csproj
+		SccProjectName5 = V8.NET\u0020Proxy\u0020Interface
+		SccLocalPath5 = V8.NET\u0020Proxy\u0020Interface
+		SccProjectUniqueName6 = V8.NET\u0020Proxy\\V8.Net\u0020Proxy\u0020x64.vcxproj
 		SccProjectTopLevelParentUniqueName6 = V8.Net.sln
-		SccProjectName6 = V8.NET\u0020Proxy\u0020Interface
-		SccLocalPath6 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName7 = V8.NET\u0020Proxy\\V8.Net\u0020Proxy\u0020x64.vcxproj
+		SccProjectName6 = V8.NET\u0020Proxy
+		SccLocalPath6 = V8.NET\u0020Proxy
+		SccProjectUniqueName7 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface.csproj
 		SccProjectTopLevelParentUniqueName7 = V8.Net.sln
-		SccProjectName7 = V8.NET\u0020Proxy
-		SccLocalPath7 = V8.NET\u0020Proxy
-		SccProjectUniqueName8 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface.csproj
+		SccProjectName7 = V8.NET\u0020Proxy\u0020Interface
+		SccLocalPath7 = V8.NET\u0020Proxy\u0020Interface
+		SccProjectUniqueName8 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x86.csproj
 		SccProjectTopLevelParentUniqueName8 = V8.Net.sln
 		SccProjectName8 = V8.NET\u0020Proxy\u0020Interface
 		SccLocalPath8 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName9 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x86.csproj
+		SccProjectUniqueName9 = V8.Net\\V8.Net\u0020-\u00203.5.csproj
 		SccProjectTopLevelParentUniqueName9 = V8.Net.sln
-		SccProjectName9 = V8.NET\u0020Proxy\u0020Interface
-		SccLocalPath9 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName10 = V8.Net\\V8.Net\u0020-\u00203.5.csproj
+		SccProjectName9 = V8.Net
+		SccLocalPath9 = V8.Net
+		SccProjectUniqueName10 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020-\u00203.5.csproj
 		SccProjectTopLevelParentUniqueName10 = V8.Net.sln
-		SccProjectName10 = V8.Net
-		SccLocalPath10 = V8.Net
-		SccProjectUniqueName11 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020-\u00203.5.csproj
+		SccProjectName10 = V8.NET\u0020Proxy\u0020Interface
+		SccLocalPath10 = V8.NET\u0020Proxy\u0020Interface
+		SccProjectUniqueName11 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x64\u0020-\u00203.5.csproj
 		SccProjectTopLevelParentUniqueName11 = V8.Net.sln
 		SccProjectName11 = V8.NET\u0020Proxy\u0020Interface
 		SccLocalPath11 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName12 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x64\u0020-\u00203.5.csproj
+		SccProjectUniqueName12 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x86\u0020-\u00203.5.csproj
 		SccProjectTopLevelParentUniqueName12 = V8.Net.sln
 		SccProjectName12 = V8.NET\u0020Proxy\u0020Interface
 		SccLocalPath12 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName13 = V8.NET\u0020Proxy\u0020Interface\\V8.Net\u0020Proxy\u0020Interface\u0020x86\u0020-\u00203.5.csproj
+		SccProjectUniqueName13 = V8.Net\u0020Shared\u0020Types\\V8.Net\u0020Shared\u0020Types\u0020-\u00203.5.csproj
 		SccProjectTopLevelParentUniqueName13 = V8.Net.sln
-		SccProjectName13 = V8.NET\u0020Proxy\u0020Interface
-		SccLocalPath13 = V8.NET\u0020Proxy\u0020Interface
-		SccProjectUniqueName14 = V8.Net\u0020Shared\u0020Types\\V8.Net\u0020Shared\u0020Types\u0020-\u00203.5.csproj
-		SccProjectTopLevelParentUniqueName14 = V8.Net.sln
-		SccProjectName14 = V8.Net\u0020Shared\u0020Types
-		SccLocalPath14 = V8.Net\u0020Shared\u0020Types
+		SccProjectName13 = V8.Net\u0020Shared\u0020Types
+		SccLocalPath13 = V8.Net\u0020Shared\u0020Types
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -192,26 +186,6 @@ Global
 		{EF90724B-3893-4ACF-BFEE-88532485B11A}.Release|x64.Build.0 = Release|x64
 		{EF90724B-3893-4ACF-BFEE-88532485B11A}.Release|x86.ActiveCfg = Release|x86
 		{EF90724B-3893-4ACF-BFEE-88532485B11A}.Release|x86.Build.0 = Release|x86
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Win32.ActiveCfg = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|Win32.Build.0 = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|x64.Build.0 = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Debug|x86.Build.0 = Debug|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Win32.ActiveCfg = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|Win32.Build.0 = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|x64.ActiveCfg = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|x64.Build.0 = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|x86.ActiveCfg = Release|Any CPU
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C}.Release|x86.Build.0 = Release|Any CPU
 		{8BFB50C4-51E7-4DA4-873B-B79F123A9723}.Debug|Any CPU.ActiveCfg = Debug|Win32
 		{8BFB50C4-51E7-4DA4-873B-B79F123A9723}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{8BFB50C4-51E7-4DA4-873B-B79F123A9723}.Debug|Win32.ActiveCfg = Debug|Win32
@@ -413,7 +387,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{8D612C41-7D95-499C-A82D-C5C3C82225B3} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
 		{EF90724B-3893-4ACF-BFEE-88532485B11A} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
-		{68C9EB2C-8AFF-494D-86E9-4E6FE6DC666C} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
 		{8BFB50C4-51E7-4DA4-873B-B79F123A9723} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
 		{81752B54-1391-44CB-A1F5-ECCF7279DB71} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
 		{C6ABB6D8-97A2-4ECF-889F-823E891D798B} = {4CC56C49-DA3A-444E-B051-D1ECC8B51D7D}
@@ -425,8 +398,5 @@ Global
 		{19A8A72C-9105-4A50-AB54-94B13F2AED78} = {8030D6BC-ED8A-4F0D-85F4-EA20A1B0F90F}
 		{5C5D7C6B-52D4-408C-BB02-32110D118111} = {8030D6BC-ED8A-4F0D-85F4-EA20A1B0F90F}
 		{EB32BBCC-6DEF-4F34-807B-E81273BF0275} = {8030D6BC-ED8A-4F0D-85F4-EA20A1B0F90F}
-	EndGlobalSection
-	GlobalSection(Performance) = preSolution
-		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal
