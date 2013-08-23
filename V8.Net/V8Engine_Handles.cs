@@ -6,8 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-#if V2 || V3 || V3_5
-#else
+#if !(V1_1 || V2 || V3 || V3_5)
 using System.Dynamic;
 #endif
 

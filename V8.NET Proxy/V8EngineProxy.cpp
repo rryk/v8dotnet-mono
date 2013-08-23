@@ -346,6 +346,14 @@ HandleProxy* V8EngineProxy::CreateString(uint16_t* str)
     return GetHandleProxy(v8::String::New(str)); 
 }
 
+HandleProxy* V8EngineProxy::CreateError(uint16_t* message, JSValueType errorType) 
+{ 
+    if (errorType >= 0) throw exception("Invalid error type.");
+    auto h = GetHandleProxy(v8::String::New(message)); 
+    h->_Type = errorType;
+    return h;
+}
+
 HandleProxy* V8EngineProxy::CreateDate(double ms) 
 { 
     return GetHandleProxy(Date::New(ms));
@@ -378,6 +386,11 @@ HandleProxy* V8EngineProxy::CreateArray(uint16_t** items, uint16_t length)
             array->Set(i, String::New(items[i]));
 
     return GetHandleProxy(array);
+}
+
+HandleProxy* V8EngineProxy::CreateNullValue()
+{
+    return GetHandleProxy(v8::Null());
 }
 
 // ------------------------------------------------------------------------------------------------------------------------

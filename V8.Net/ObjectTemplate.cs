@@ -17,18 +17,53 @@ namespace V8.Net
 
     public interface ITemplate
     {
+        /// <summary>
+        /// The V8Engine instance associated with this template.
+        /// </summary>
         V8Engine Engine { get; }
+    }
+
+    internal interface ITemplateInternal
+    {
+        uint _ReferenceCount { get; set; }
     }
 
     // ========================================================================================================================
 
-    public unsafe abstract class TemplateBase<ObjectType> : ITemplate where ObjectType : class, IV8NativeObject
+    public unsafe abstract class TemplateBase<ObjectType> : ITemplate, ITemplateInternal where ObjectType : class, IV8NativeObject
     {
         // --------------------------------------------------------------------------------------------------------------------
 
         public V8Engine Engine { get { return _Engine; } }
         internal V8Engine _Engine;
 
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Returns the parent to this template, if any.
+        /// This is currently only set on object template instances associated with function templates (where {FunctionTemplate} is the parent).
+        /// </summary>
+        public ITemplate Parent
+        {
+            get { return _Parent; }
+            internal set
+            {
+                if (_Parent != null) ((ITemplateInternal)this)._ReferenceCount--;
+                _Parent = value;
+                if (_Parent != null) ((ITemplateInternal)this)._ReferenceCount++;
+            }
+        }
+        ITemplate _Parent;
+
+        /// <summary>
+        /// The number of objects that reference this object.
+        /// This is required because of the way the GC resets all weak references to null, and finalizes in no special order.
+        /// Dependent objects are required to update this when they are finally collected (as some may become re-registered with the finalizer).
+        /// </summary>
+        uint ITemplateInternal._ReferenceCount { get; set; }
+
+        // --------------------------------------------------------------------------------------------------------------------
 
         protected List<Delegate> _NativeCallbacks; // (if not stored here, then delegates will be GC'd and callbacks from native code will fail)
 
@@ -56,10 +91,10 @@ namespace V8.Net
 
         protected HandleProxy* _NamedPropertyGetter(string propertyName, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return null;
-            var mo = objInfo.ManagedObject as IV8ManagedObject; // (because native object wrappers are also supported)
+            var mo = obj.Reset() as IV8ManagedObject; // (this acts also as a test because native object wrappers are also supported)
             return mo != null ? mo.NamedPropertyGetter(ref propertyName) : null;
         }
 
@@ -67,20 +102,20 @@ namespace V8.Net
         {
             using (InternalHandle hValue = new InternalHandle(value, false))
             {
-                var objInfo = _Engine._Objects[info.ManagedObjectID];
-                if (objInfo == null)
+                var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+                if (obj == null)
                     return null;
-                var mo = objInfo.ManagedObject as IV8ManagedObject;
+                var mo = obj.Reset() as IV8ManagedObject;
                 return mo != null ? mo.NamedPropertySetter(ref propertyName, hValue, V8PropertyAttributes.Undefined) : null;
             }
         }
 
         protected V8PropertyAttributes _NamedPropertyQuery(string propertyName, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return V8PropertyAttributes.Undefined;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             var result = mo != null ? mo.NamedPropertyQuery(ref propertyName) : null;
             if (result != null) return result.Value;
             else return V8PropertyAttributes.Undefined; // (not intercepted, so perform default action)
@@ -88,10 +123,10 @@ namespace V8.Net
 
         protected int _NamedPropertyDeleter(string propertyName, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return -1;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             var result = mo != null ? mo.NamedPropertyDeleter(ref propertyName) : null;
             if (result != null) return result.Value ? 1 : 0;
             else return -1; // (not intercepted, so perform default action)
@@ -99,10 +134,10 @@ namespace V8.Net
 
         protected HandleProxy* _NamedPropertyEnumerator(ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return null;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             return mo != null ? mo.NamedPropertyEnumerator() : null;
         }
 
@@ -110,10 +145,10 @@ namespace V8.Net
 
         protected HandleProxy* _IndexedPropertyGetter(Int32 index, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return null;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             return mo != null ? mo.IndexedPropertyGetter(index) : null;
         }
 
@@ -121,20 +156,20 @@ namespace V8.Net
         {
             using (InternalHandle hValue = new InternalHandle(value, false))
             {
-                var objInfo = _Engine._Objects[info.ManagedObjectID];
-                if (objInfo == null)
+                var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+                if (obj == null)
                     return null;
-                var mo = objInfo.ManagedObject as IV8ManagedObject;
+                var mo = obj.Reset() as IV8ManagedObject;
                 return mo != null ? mo.IndexedPropertySetter(index, hValue) : null;
             }
         }
 
         protected V8PropertyAttributes _IndexedPropertyQuery(Int32 index, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return V8PropertyAttributes.Undefined;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             var result = mo != null ? mo.IndexedPropertyQuery(index) : null;
             if (result != null) return result.Value;
             else return V8PropertyAttributes.Undefined; // (not intercepted, so perform default action)
@@ -142,10 +177,10 @@ namespace V8.Net
 
         protected int _IndexedPropertyDeleter(Int32 index, ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return -1;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             var result = mo != null ? mo.IndexedPropertyDeleter(index) : null;
             if (result != null) return result.Value ? 1 : 0;
             else return -1; // (not intercepted, so perform default action)
@@ -153,10 +188,10 @@ namespace V8.Net
 
         protected HandleProxy* _IndexedPropertyEnumerator(ref ManagedAccessorInfo info)
         {
-            var objInfo = _Engine._Objects[info.ManagedObjectID];
-            if (objInfo == null)
+            var obj = _Engine._GetObjectWeakReference(info.ManagedObjectID);
+            if (obj == null)
                 return null;
-            var mo = objInfo.ManagedObject as IV8ManagedObject;
+            var mo = obj.Reset() as IV8ManagedObject;
             return mo != null ? mo.IndexedPropertyEnumerator() : null;
         }
 
@@ -167,14 +202,16 @@ namespace V8.Net
 
     public unsafe class ObjectTemplate : TemplateBase<IV8ManagedObject>
     {
+        // --------------------------------------------------------------------------------------------------------------------
+
         internal NativeObjectTemplateProxy* _NativeObjectTemplateProxy;
 
         // --------------------------------------------------------------------------------------------------------------------
 
         public ObjectTemplate()
         {
-            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly())
-                throw new InvalidOperationException("You much create object templates by calling 'V8Engine.CreateObjectTemplate()'.");
+            if (Assembly.GetCallingAssembly() != Assembly.GetExecutingAssembly() && !Assembly.GetCallingAssembly().FullName.StartsWith("mscorlib,"))
+                throw new InvalidOperationException("You must create object templates by calling 'V8Engine.CreateObjectTemplate()'.");
         }
 
         internal void _Initialize(V8Engine v8EngineProxy, bool registerPropertyInterceptors = true)
@@ -202,7 +239,12 @@ namespace V8.Net
 
         ~ObjectTemplate()
         {
-            Dispose();
+            if (((ITemplateInternal)this)._ReferenceCount > 0
+                || _Engine.GetObjects(this).Length > 0
+                || Parent != null && _Engine.GetObjects(Parent).Length > 0)
+                GC.ReRegisterForFinalize(this);
+            else
+                Dispose();
         }
 
         public void Dispose() // TODO: !!! This will cause issues if removed while the native object exists. !!!
@@ -216,14 +258,17 @@ namespace V8.Net
 
         // --------------------------------------------------------------------------------------------------------------------
 
-        internal bool _PropertyInterceptorsRegistered;
+        /// <summary>
+        /// Returns true if this function template has any interceptors (callbacks) registered.
+        /// </summary>
+        public bool PropertyInterceptorsRegistered { get; internal set; }
 
         /// <summary>
         /// Registers handlers that intercept access to properties on ALL objects created by this template.  The native V8 engine only supports this on 'ObjectTemplate's.
         /// </summary>
         public void RegisterPropertyInterceptors()
         {
-            if (!_PropertyInterceptorsRegistered)
+            if (!PropertyInterceptorsRegistered)
             {
                 V8NetProxy.RegisterNamedPropertyHandlers(_NativeObjectTemplateProxy,
                     _SetDelegate<ManagedNamedPropertyGetter>(_NamedPropertyGetter),
@@ -239,7 +284,7 @@ namespace V8.Net
                     _SetDelegate<ManagedIndexedPropertyDeleter>(_IndexedPropertyDeleter),
                     _SetDelegate<ManagedIndexedPropertyEnumerator>(_IndexedPropertyEnumerator));
 
-                _PropertyInterceptorsRegistered = true;
+                PropertyInterceptorsRegistered = true;
             }
         }
 
@@ -248,13 +293,13 @@ namespace V8.Net
         /// </summary>
         public void UnregisterPropertyInterceptors()
         {
-            if (_PropertyInterceptorsRegistered)
+            if (PropertyInterceptorsRegistered)
             {
                 V8NetProxy.UnregisterNamedPropertyHandlers(_NativeObjectTemplateProxy);
 
                 V8NetProxy.UnregisterIndexedPropertyHandlers(_NativeObjectTemplateProxy);
 
-                _PropertyInterceptorsRegistered = false;
+                PropertyInterceptorsRegistered = false;
             }
         }
 
@@ -269,32 +314,32 @@ namespace V8.Net
         /// '<seealso cref="UnregisterPropertyInterceptors()"/>' on the object template to make them the same speed as if 'V8Engine.CreateObject()' was used.</para>
         /// </summary>
         /// <typeparam name="T">The type of managed object to create, which must implement 'IV8NativeObject',</typeparam>
-        public T CreateObject<T>() where T : class, IV8NativeObject, new()
+        public T CreateObject<T>() where T : V8NativeObject, new()
         {
             if (_NativeObjectTemplateProxy == null)
                 throw new InvalidOperationException("This managed object template is either not initialized, or does not support creating V8 objects.");
 
             // ... create object locally first and index it ...
 
-            var objInfo = _Engine._CreateManagedObject<T>(this, null);
+            var obj = _Engine._CreateManagedObject<T>(this, InternalHandle.Empty);
 
             // ... create the native object and associated it to the managed wrapper ...
 
             try
             {
-                objInfo._Handle.Set(V8NetProxy.CreateObjectFromTemplate(_NativeObjectTemplateProxy, objInfo._ID));
+                obj.Handle._Set(V8NetProxy.CreateObjectFromTemplate(_NativeObjectTemplateProxy, obj.ID));
                 // (note: setting '_NativeObject' also updates it's '_ManagedObject' field if necessary.
             }
             catch (Exception ex)
             {
                 // ... something went wrong, so remove the new managed object ...
-                _Engine._Objects.Remove(objInfo._ID);
+                _Engine._RemoveObjectWeakReference(obj.ID);
                 throw ex;
             }
 
-            objInfo.Initialize();
+            obj.Initialize();
 
-            return (T)objInfo.ManagedObject;
+            return (T)obj;
         }
 
         /// <summary>

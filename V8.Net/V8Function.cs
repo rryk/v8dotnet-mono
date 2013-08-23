@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-#if V2 || V3 || V3_5
-#else
+#if !(V1_1 || V2 || V3 || V3_5)
 using System.Dynamic;
+using System.Linq.Expressions;
 #endif
 
 namespace V8.Net
@@ -50,36 +50,63 @@ namespace V8.Net
     {
         // --------------------------------------------------------------------------------------------------------------------
 
-        public FunctionTemplate FunctionTemplate { get { return (FunctionTemplate)Engine.GetObjectTemplate(this); } }
+        public FunctionTemplate FunctionTemplate { get { return (FunctionTemplate)base.Template; } }
 
         public JSFunction Callback { get; set; }
 
-        /// <summary>
-        /// Calls the native side to invoke the function associated with this managed function wrapper.
-        /// <para>Note: This simply calls 'base.Call()' without a function name.</para>
-        /// </summary>
-        public InternalHandle Call(params InternalHandle[] args) { return base.Call(null, null, args); }
+        // --------------------------------------------------------------------------------------------------------------------
 
-        /// <summary>
-        /// Calls the native side to invoke the function associated with this managed function wrapper.
-        /// The '_this' property is the "this" object within the function when called.
-        /// <para>Note: This simply calls 'base.Call()' without a function name.</para>
-        /// </summary>
-        public InternalHandle Call(InternalHandle _this, params InternalHandle[] args) { return base.Call(null, _this, args); }
+        public V8Function()
+            : base()
+        {
+        }
+
+        public V8Function(IV8Function proxy)
+            : base(proxy)
+        {
+        }
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// If the function object has a function property, you can use this to invoke it instead.
+        /// Calls the native side to invoke the function associated with this managed function wrapper.
+        /// <para>Note: This method simply calls 'Handle.Call()' without a function name.</para>
         /// </summary>
-        public override InternalHandle Call(string functionName, InternalHandle _this, params InternalHandle[] args)
+        public InternalHandle Call(params InternalHandle[] args) { return _Handle.Call(null, null, args); }
+
+        /// <summary>
+        /// Calls the native side to invoke the function associated with this managed function wrapper.
+        /// The '_this' property is the "this" object within the function when called.
+        /// <para>Note: This method simply calls 'Handle.Call()' without a function name.</para>
+        /// </summary>
+        public InternalHandle Call(InternalHandle _this, params InternalHandle[] args) { return _Handle.Call(null, _this, args); }
+
+        /// <summary>
+        /// If the function object has a function property in itself (usually considered a static property in theory), you can use this to invoke it.
+        /// </summary>
+        public InternalHandle Call(string functionName, InternalHandle _this, params InternalHandle[] args)
         {
-            if (!string.IsNullOrEmpty(functionName))
-                return base.Call(functionName, _this, args); // (if a function name exists, then it is a request to get a property name on the object as a function [and not to use this function object itself])
+            if (functionName.IsNullOrWhiteSpace()) throw new ArgumentNullException("functionName (cannot be null, empty, or only whitespace)");
+            return _Handle.Call(functionName, _this, args); // (if a function name exists, then it is a request to get a property name on the object as a function [and not to use this function object itself])
+        }
 
-            var __this = Engine.GetObject<V8NativeObject>(_this);
+        // --------------------------------------------------------------------------------------------------------------------
+    }
 
-            return Callback(Engine, false, _this, args);
+    // ========================================================================================================================
+
+    /// <summary>
+    /// This generic version of 'V8ManagedObject' allows injecting your own class by implementing the 'IV8ManagedObject' interface.
+    /// </summary>
+    /// <typeparam name="T">Your own class, which implements the 'IV8ManagedObject' interface.  Don't use the generic version if you are able to inherit from 'V8ManagedObject' instead.</typeparam>
+    public unsafe class V8Function<T> : V8Function
+        where T : IV8Function, new()
+    {
+        // --------------------------------------------------------------------------------------------------------------------
+
+        public V8Function()
+            : base(new T())
+        {
         }
 
         // --------------------------------------------------------------------------------------------------------------------

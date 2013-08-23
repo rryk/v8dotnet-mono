@@ -59,7 +59,10 @@ Handle<Value> FunctionTemplateProxy::InvocationCallbackProxy(const Arguments& ar
         auto result = funcTempProxy->_ManagedCallback(0, args.IsConstructCall(), _this, _args, argLength);
 
         if (result != nullptr)
-            return result->Handle(); // (note: the returned value was created via p/invoke calls from the managed side, so the managed side is expected to tracked and freed this handle when done)
+            if (result->IsError())
+                return ThrowException(Exception::Error(result->Handle()->ToString()));
+            else
+                return result->Handle(); // (note: the returned value was created via p/invoke calls from the managed side, so the managed side is expected to tracked and freed this handle when done)
 
         // (result == null == undefined [which means the managed side didn't return anything])
     }
@@ -92,28 +95,17 @@ HandleProxy* FunctionTemplateProxy::GetFunction()
 
 // ------------------------------------------------------------------------------------------------------------------------
 
-//??HandleProxy* FunctionTemplateProxy::GetPrototype(int32_t managedObjectID, ObjectTemplateProxy *objTemplate)
-//{
-//    auto obj = _FunctionTemplate->GetFunction();
-//    auto proto = obj->Get(String::New("prototype")).As<Object>();
-//    auto proxyVal = _EngineProxy->GetHandleProxy(proto);
-//    ConnectObject(proxyVal, managedObjectID, objTemplate);
-//    return proxyVal;
-//}
-
-// ------------------------------------------------------------------------------------------------------------------------
-
 HandleProxy* FunctionTemplateProxy::CreateInstance(int32_t managedObjectID, int32_t argCount, HandleProxy** args)
 {
     Handle<Value>* hArgs = new Handle<Value>[argCount];
     for (int i = 0; i < argCount; i++)
         hArgs[i] = args[i]->Handle();
     auto obj = _FunctionTemplate->GetFunction()->NewInstance(argCount, hArgs);
-    delete[] hArgs; //?? (does "disposed" still need to be called here for each item?)
+    delete[] hArgs; // TODO: (does "disposed" still need to be called here for each item?)
 
     auto proxyVal = _EngineProxy->GetHandleProxy(obj);
     proxyVal->_ManagedObjectID = managedObjectID;
-    auto count = obj->InternalFieldCount();//??
+    //??auto count = obj->InternalFieldCount();
     obj->SetAlignedPointerInInternalField(0, this); // (stored a reference to the proxy instance for the call-back functions)
     obj->SetInternalField(1, External::New((void*)managedObjectID)); // (stored a reference to the managed object for the call-back functions)
     obj->SetHiddenValue(String::New("ManagedObjectID"), Integer::New(managedObjectID)); // (won't be used on template created objects [fields are faster], but done anyhow for consistency)

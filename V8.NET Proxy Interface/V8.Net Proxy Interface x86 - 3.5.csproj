@@ -34,6 +34,7 @@
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v3' ">$(DefineConstants);V3</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v2' ">$(DefineConstants);V2</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v1.1' ">$(DefineConstants);V1_1</DefineConstants>
+    <LangVersion>4</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>

@@ -32,6 +32,7 @@
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v3.5' ">V3_5</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v3' ">V3</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v2' ">V2</DefineConstants>
+    <LangVersion>4</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -116,6 +117,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Binding.cs" />
     <Compile Include="Enums.cs" />
     <Compile Include="NativeTypes.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

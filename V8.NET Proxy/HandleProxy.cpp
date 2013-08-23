@@ -142,11 +142,11 @@ HandleProxy* HandleProxy::SetHandle(v8::Handle<Value> handle)
     {
         _Type = JSV_Object;
     }
-    else if (_Handle->IsFalse()) // TODO: Validate this is correct. //??
+    else if (_Handle->IsFalse()) // TODO: Validate this is correct.
     {
         _Type = JSV_Bool;
     }
-    else if (_Handle->IsTrue()) // TODO: Validate this is correct. //??
+    else if (_Handle->IsTrue()) // TODO: Validate this is correct.
     {
         _Type = JSV_Bool;
     }
@@ -167,30 +167,37 @@ void HandleProxy::_DisposeCallback(Isolate* isolate, Persistent<Value> object, v
 
 // ------------------------------------------------------------------------------------------------------------------------
 
+// Should be called once to attempt to pull the ID.
+// If there's no ID, then the managed object ID will be set to -2 to prevent checking again.
+// To force a re-check, simply set the value back to -1.
 int HandleProxy::GetManagedObjectID()
 {
-    if (_ManagedObjectID >= 0)
+    if (_ManagedObjectID < -1 || _ManagedObjectID >= 0)
         return _ManagedObjectID;
-    else if (_Handle->IsObject())
-    {
-        // ... if this was created by a template then there will be at least 2 fields set, so assume the second is a managed ID value, 
-        // but if not, then check for a hidden property for objects not created by templates ...
+    else {
+        _ManagedObjectID = -2; // (assume nothing found until something is)
 
-        auto obj = _Handle.As<Object>();
-        if (obj->InternalFieldCount() > 1)
+        if (_Handle->IsObject())
         {
-            auto field = obj->GetInternalField(1); // (may be faster than hidden values)
-            if (field->IsExternal())
-                _ManagedObjectID = (int32_t)field.As<External>()->Value();
-        }
-        else
-        {
-            auto handle = obj->GetHiddenValue(String::New("ManagedObjectID"));
-            if (!handle.IsEmpty() && handle->IsInt32())
-                _ManagedObjectID = (int32_t)handle->Int32Value();
+            // ... if this was created by a template then there will be at least 2 fields set, so assume the second is a managed ID value, 
+            // but if not, then check for a hidden property for objects not created by templates ...
+
+            auto obj = _Handle.As<Object>();
+
+            if (obj->InternalFieldCount() > 1)
+            {
+                auto field = obj->GetInternalField(1); // (may be faster than hidden values)
+                if (field->IsExternal())
+                    _ManagedObjectID = (int32_t)field.As<External>()->Value();
+            }
+            else
+            {
+                auto handle = obj->GetHiddenValue(String::New("ManagedObjectID"));
+                if (!handle.IsEmpty() && handle->IsInt32())
+                    _ManagedObjectID = (int32_t)handle->Int32Value();
+            }
         }
     }
-    else _ManagedObjectID = -1;
     return _ManagedObjectID;
 }
 
@@ -233,16 +240,6 @@ void HandleProxy::_RevivableCallback(Isolate* isolate, Persistent<Value>* object
             handleProxy->_Handle.Clear(); // (no longer valid)
         }
     }
-
-    //??    // ('dispose' is true when there are no more handles or object references on the managed side associated this this instance)
-    //if (dispose)
-    //{
-    //    object->Dispose(); // (V8 handle is no longer tracked on the managed side, so let it go within this GC request [better here while idle])
-    //    handleProxy->_Handle.Clear(); // (no longer valid)
-    //    handleProxy->Dispose(); // (caches the instance for future reuse)
-    //}
-    //else
-    //    object->MakeWeak<Value, HandleProxy>(isolate, handleProxy, _RevivableCallback); //TODO: MAke sure this doesn't dead-lock when forcing the GC.
 }
 
 // ------------------------------------------------------------------------------------------------------------------------

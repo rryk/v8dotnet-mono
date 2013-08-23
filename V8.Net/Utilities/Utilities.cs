@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace V8.Net
@@ -183,7 +184,66 @@ namespace V8.Net
             return defaultValue;
         }
 
-        // --------------------------------------------------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------------------------------------------------
+
+        public static bool IsBoolean(Type t)
+        {
+            return (t == typeof(bool) || t == typeof(Boolean));
+        }
+
+        public static bool IsDateTime(Type t)
+        {
+            return (t == typeof(DateTime));
+        }
+        public static bool IsDateTime(string text)
+        {
+            DateTime dt; return DateTime.TryParse(text, out dt);
+        }
+
+        public static bool IsInt(Type t)
+        {
+            return (t == typeof(SByte) || t == typeof(int) || t == typeof(Int16) || t == typeof(Int32) || t == typeof(Int64));
+        }
+        public static bool IsInt64(string text)
+        {
+            Int64 i; return Int64.TryParse(text, out i);
+        }
+        public static bool IsInt(string text)
+        {
+            int i; return int.TryParse(text, out i);
+        }
+
+        public static bool IsUInt(Type t)
+        {
+            return (t == typeof(Byte) || t == typeof(uint) || t == typeof(UInt16) || t == typeof(UInt32) || t == typeof(UInt64));
+        }
+
+        public static bool IsFloat(Type t)
+        {
+            return (t == typeof(float) || t == typeof(double) || t == typeof(decimal));
+        }
+
+        public static bool IsNumeric(Type t)
+        {
+            return (IsInt(t) || IsUInt(t) || IsFloat(t));
+        }
+        public static bool IsNumeric(string text)
+        {
+            return Regex.IsMatch(text, @"^[+|-]?\d+\.?\d*$");
+            //decimal d; return decimal.TryParse(text, out d);
+        }
+        public static bool IsSimpleNumeric(string text)
+        {
+            // http://derekslager.com/blog/posts/2007/09/a-better-dotnet-regular-expression-tester.ashx
+            return Regex.IsMatch(text, @"^(?:\+|\-)?\d+\.?\d*$");
+        }
+
+        public static bool IsString(Type t)
+        {
+            return (t == typeof(string) || t == typeof(String));
+        }
+
+        // ---------------------------------------------------------------------------------------------------------------------
     }
 
     // ========================================================================================================================
@@ -200,6 +260,8 @@ namespace V8.Net
         {
             if (targetType == null)
                 throw new ArgumentNullException("targetType");
+
+            if (value != null && value.GetType() == targetType) return value; // (same type as target!)
 
             if (provider == null) provider = Thread.CurrentThread.CurrentCulture;
 
@@ -222,7 +284,6 @@ namespace V8.Net
                     value = 0;
             }
             else if (value == null) return null;
-            else if (value.GetType() == targetType) return value; // (same type as target!)
             else if (targetType == typeof(Boolean))
             {
                 if (value == null || value is string && ((string)value).IsNullOrWhiteSpace()) // (null or empty strings will be treated as 'false', but explicit text will try to be converted)

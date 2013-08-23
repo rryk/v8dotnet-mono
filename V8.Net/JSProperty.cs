@@ -65,9 +65,13 @@ namespace V8.Net
         /// </summary>
         public JSProperty(V8PropertyAttributes attributes = V8PropertyAttributes.None) { Source = default(TValueSource); _Attributes = attributes; }
         public JSProperty(TValueSource source, V8PropertyAttributes attributes = V8PropertyAttributes.None) { Source = source; _Attributes = attributes; }
-        public JSProperty(TValueSource source, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None) : this(source, attributes) { _Value = value; }
+        public JSProperty(TValueSource source, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None) : this(source, attributes) { _Value.Set(value); }
         public JSProperty(InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None) : this(default(TValueSource), value, attributes) { }
-        public JSProperty(V8Engine engine, object value, V8PropertyAttributes attributes = V8PropertyAttributes.None) : this(InternalHandle.Empty, attributes) { _Value = engine != null ? engine.CreateNativeValue(value) : null; }
+        public JSProperty(V8Engine engine, object value, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+            : this(InternalHandle.Empty, attributes)
+        {
+            _Value.Set(engine != null ? engine.CreateValue(value) : InternalHandle.Empty);
+        }
 
         ~JSProperty() { _Value.Dispose(); }
 

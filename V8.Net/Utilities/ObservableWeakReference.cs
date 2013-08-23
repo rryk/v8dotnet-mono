@@ -54,7 +54,6 @@ namespace V8.Net
 
         public void DoFinalize(T obj)
         {
-            //??this can happen when the app shuts down??if (_Object != null) throw new InvalidOperationException("There is still a weak reference to the wrapped object. Are you passing the right instance?");
             NearDeathReference = obj;
             _IsGCReady = true;
             if (GCReady != null)

@@ -35,6 +35,7 @@
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v3' ">$(DefineConstants);V3</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v2' ">$(DefineConstants);V2</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v1.1' ">$(DefineConstants);V1_1</DefineConstants>
+    <LangVersion>4</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -96,6 +97,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Handle.cs" />
+    <Compile Include="InternalHandle.cs" />
+    <Compile Include="V8Engine_Binding.cs" />
     <Compile Include="V8Engine_Worker.cs" />
     <Compile Include="V8Engine_Handles.cs" />
     <Compile Include="Exceptions.cs" />
@@ -110,7 +114,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="V8Engine.cs" />
     <Compile Include="FunctionTemplate.cs" />
-    <Compile Include="Handles.cs" />
     <Compile Include="ObjectTemplate.cs" />
     <Compile Include="V8ManagedObject.cs" />
   </ItemGroup>

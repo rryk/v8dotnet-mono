@@ -6,16 +6,16 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-#if V2 || V3 || V3_5
-#else
+#if !(V1_1 || V2 || V3 || V3_5)
 using System.Dynamic;
 #endif
 
 namespace V8.Net
 {
     // ========================================================================================================================
-    // The handles section has methods to deal with creating and disposing of managed handles (which wrap native V8 handles).
-    // This helps to reuse existing handles to prevent having to create new ones every time, thus greatly speeding things up.
+    // The worker section implements a bridge GC system, which marks objects weak when 'V8NativeObject' instances no longer have any references.  Such objects
+    // are called "weak" objects, and the worker calls the native side to also mark the native object as weak.  Once the V8 GC calls back, the managed object
+    // will then complete it's finalization process.
 
     public unsafe partial class V8Engine
     {
@@ -24,10 +24,9 @@ namespace V8.Net
         internal Thread _Worker;
 
         /// <summary>
-        /// When handle proxies are no longer in use, they are registered here for quick reference so the worker thread can dispose of them.
-        /// <para>Note: If a managed object is associated, all references to it must also be gone before a handle can be disposed.</para>
+        /// When 'V8NativeObject' objects are no longer in use, they are registered here for quick reference so the worker thread can dispose of them.
         /// </summary>
-        internal readonly List<int> _ObjectInfosToBeMadeWeak = new List<int>(100);
+        internal readonly List<int> _WeakObjects = new List<int>(100);
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -35,7 +34,7 @@ namespace V8.Net
         {
             _Worker = new Thread(_WorkerLoop) { IsBackground = true }; // (note: must set 'IsBackground=true', else the app will hang on exit)
             _Worker.Priority = ThreadPriority.Lowest;
-            _Worker.Start();
+            //_Worker.Start();
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -51,7 +50,7 @@ namespace V8.Net
                 if (_PauseWorker == 1) _PauseWorker = 2;
                 else
                 {
-                    workPending = _ObjectInfosToBeMadeWeak.Count > 0;
+                    workPending = _WeakObjects.Count > 0;
 
                     while (workPending && _PauseWorker == 0)
                     {
@@ -79,26 +78,30 @@ namespace V8.Net
         /// </summary>
         bool _DoWorkStep()
         {
-            int objInfoID;
-            _ObjectInfo objInfo;
+            int objID = -1;
 
-            lock (_ObjectInfosToBeMadeWeak)
+            lock (_WeakObjects)
             {
                 if (_Worker_Index < 0)
-                    _Worker_Index = _ObjectInfosToBeMadeWeak.Count - 1;
+                    _Worker_Index = _WeakObjects.Count - 1;
 
                 if (_Worker_Index >= 0)
                 {
-                    objInfoID = _ObjectInfosToBeMadeWeak[_Worker_Index];
-                    objInfo = _Objects[objInfoID];
-                    objInfo._MakeWeak();
-                    _ObjectInfosToBeMadeWeak.RemoveAt(_Worker_Index);
+                    objID = _WeakObjects[_Worker_Index];
+
+                    _WeakObjects.RemoveAt(_Worker_Index);
 
                     _Worker_Index--;
                 }
-
-                return _Worker_Index >= 0;
             }
+
+            if (objID >= 0)
+                lock (_Objects)
+                {
+                    _Objects[objID].Object._MakeWeak();
+                }
+
+            return _Worker_Index >= 0;
         }
 
         /// <summary>

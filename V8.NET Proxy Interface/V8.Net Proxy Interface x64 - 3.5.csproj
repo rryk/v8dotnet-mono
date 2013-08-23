@@ -34,6 +34,7 @@
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v3' ">$(DefineConstants);V3</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v2' ">$(DefineConstants);V2</DefineConstants>
     <DefineConstants Condition=" '$(TargetFrameworkVersion)' == 'v1.1' ">$(DefineConstants);V1_1</DefineConstants>
+    <LangVersion>4</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -136,7 +137,7 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>
-</PostBuildEvent>
+    </PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
