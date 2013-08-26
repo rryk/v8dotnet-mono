@@ -34,7 +34,7 @@ namespace V8.Net
     /// Developers can inherit from this class if desired, or choose to go with a custom implementation using the IJSProperty interface instead.
     /// </summary>
     /// <typeparam name="TValueSource">When implementing properties for an IV8ManagedObject, this is the type that will store the property source value/details (such as 'object' - as already implemented in the derived 'JSProperty' class [the non-generic version]).</typeparam>
-    public class JSProperty<TValueSource> : IJSProperty
+    public class JSProperty<TValueSource> : IJSProperty, IHandleBased
     {
         /// <summary>
         /// This is a developer-defined source reference for the JavaScript 'Value' property if needed. It is not used by V8.Net.
@@ -82,6 +82,11 @@ namespace V8.Net
         {
             return _Value.ToString();
         }
+
+        V8Engine IHandleBased.Engine { get { return _Value.Engine; } }
+        Handle IHandleBased.AsHandle() { return (Handle)_Value; }
+        InternalHandle IHandleBased.AsInternalHandle { get { return _Value; } }
+        V8NativeObject IHandleBased.Object { get { return _Value.Object; } }
     }
 
     /// <summary>

@@ -200,11 +200,11 @@ namespace V8.Net
 
         bool _V8GarbageCollectionRequestCallback(HandleProxy* persistedObjectHandle)
         {
-            if (persistedObjectHandle->_ManagedObjectID >= 0)
+            if (persistedObjectHandle->_ObjectID >= 0)
             {
                 lock (_Objects)
                 {
-                    var weakRef = _Objects[persistedObjectHandle->_ManagedObjectID];
+                    var weakRef = _Objects[persistedObjectHandle->_ObjectID];
                     if (weakRef != null)
                     {
                         var obj = weakRef.Object;
@@ -443,7 +443,7 @@ namespace V8.Net
         public V8NativeObject CreateObject(InternalHandle v8Object, bool initialize = true) { return CreateObject<V8NativeObject>(v8Object, initialize); }
 
         /// <summary>
-        /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
+        /// Creates a new CLR object which will be tracked by a new V8 native object.
         /// </summary>
         /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
         /// <typeparam name="T">A custom 'V8NativeObject' type, or just use 'V8NativeObject' as a default.</typeparam>
@@ -476,15 +476,21 @@ namespace V8.Net
         }
 
         /// <summary>
-        /// Calls the native V8 proxy library to create the value instance for use within the V8 JavaScript environment.
+        /// Creates a new native V8 object only.
         /// </summary>
-        /// <param name="initialize">If true (default) then then 'IV8NativeObject.Initialize()' is called on the created wrapper before returning.</param>
-        public V8NativeObject CreateObject(bool initialize = true) { return CreateObject<V8NativeObject>(initialize); }
+        /// <param name="objectID">You can associate arbitrary NEGATIVE numbers with objects to use for tracking purposes.  The numbers have to be less than or
+        /// equal to -2. Values greater or equal to 0 are used for internal tracking of V8NativeObject instances. -1 is a default value that is set automatically
+        /// when new objects are created (which simply means "no ID is set").</param>
+        public InternalHandle CreateObject(Int64 objectID = -2)
+        {
+            if (objectID > -2) throw new InvalidOperationException("Object IDs must be <= -2.");
+            return V8NetProxy.CreateObject(_NativeV8EngineProxy, objectID);
+        }
 
         /// <summary>
         /// Calls the native V8 proxy library to create a JavaScript array for use within the V8 JavaScript environment.
         /// </summary>
-        public InternalHandle CreateValue(params InternalHandle[] items)
+        public InternalHandle CreateArray(params InternalHandle[] items)
         {
             HandleProxy** nativeArrayMem = items.Length > 0 ? Utilities.MakeHandleProxyArray(items) : null;
 
@@ -508,7 +514,7 @@ namespace V8.Net
             for (var i = 0; i < values.Length; i++)
                 try { handles[i] = CreateValue(values[i]); }
                 catch (Exception ex) { if (!ignoreErrors) throw ex; }
-            return CreateValue(handles);
+            return CreateArray(handles);
         }
 
         /// <summary>
@@ -516,7 +522,7 @@ namespace V8.Net
         /// <para>This overload provides a *quick way* to construct an array of strings.
         /// One big memory block is created to marshal the given strings at one time, which is many times faster than having to create an array of individual native strings.</para>
         /// </summary>
-        public InternalHandle CreateValue(IEnumerable<string> items = null)
+        public InternalHandle CreateValue(IEnumerable<string> items)
         {
             if (items == null) return V8NetProxy.CreateArray(_NativeV8EngineProxy, null, 0);
 
@@ -571,22 +577,18 @@ namespace V8.Net
         /// <para>Warning: Integers are 32-bit, and Numbers (double) are 64-bit.  This means converting 64-bit integers may result in data loss.</para>
         /// </summary>
         /// <param name="value">One of the supported value types: bool, byte, Int16-64, Single, float, double, string, char, StringBuilder, DateTime, or TimeSpan. (Warning: Int64 will be converted to Int32 [possible data loss])</param>
-        /// <param name="recursive">If true, and 'value' is an object type, then nested objects are bound as well, otherwise only non-object type properties are bound.
-        /// <para>For security reasons, object-type fields and properties are ignored by default ('recursive' is false).</para>
-        /// </param>
+        /// <param name="recursive">For object instances, if true, then nested objects are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
+        /// <param name="memberAttributes">For object instances, these are default flags that describe JavaScript properties for all object instance members that
+        /// don't have any 'ScriptMember' attribute.  The flags should be 'OR'd together as needed.</param>
         /// <returns>A native value that best represents the given managed value.</returns>
-        public InternalHandle CreateValue(object value, bool recursive = false)
+        public InternalHandle CreateValue(object value, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None)
         {
             if (value == null)
                 return CreateNullValue();
-            else if (value is InternalHandle)
-                return (InternalHandle)value; // (already a V8.NET value!)
-            else if (value is Handle)
-                return (Handle)value; // (already a V8.NET value!)
-            else if (value is V8NativeObject)
-                return ((V8NativeObject)value)._Handle._Handle; // (already a V8.NET value!)
-            else if (value is IJSProperty)
-                return ((IJSProperty)value).Value;
+            else if (value is IHandleBased)
+                return ((IHandleBased)value).AsInternalHandle; // (already a V8.NET value!)
             else if (value is bool)
                 return CreateValue((bool)value);
             else if (value is byte)
@@ -621,12 +623,12 @@ namespace V8.Net
                 return CreateValue((DateTime)value);
             else if (value is TimeSpan)
                 return CreateValue((TimeSpan)value);
-            else if (value is IEnumerable) // (includes arrays, lists, collections, and related)
-                return CreateValue((IEnumerable)value);
             else if (value is Enum) // (enums are simply integer like values)
-                return CreateValue((int)value); // TODO: Test enum conversion
+                return CreateValue((int)value);
+            else if (value is Array)
+                return CreateValue((IEnumerable)value);
             else if (value.GetType().IsClass)
-                return CreateBinding(value, recursive);
+                return CreateBinding(value, null, recursive, memberAttributes);
 
             var type = value != null ? value.GetType().Name : "null";
             throw new NotSupportedException("Cannot convert object of type '" + type + "' to a JavaScript value.");

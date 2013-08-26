@@ -114,6 +114,12 @@ namespace V8.Net
             PrototypeTemplate = _Engine.CreateObjectTemplate<ObjectTemplate>();
             PrototypeTemplate.Parent = this;
             PrototypeTemplate._Initialize(_Engine, (NativeObjectTemplateProxy*)V8NetProxy.GetFunctionPrototypeTemplateProxy(_NativeFunctionTemplateProxy));
+
+            OnInitialized();
+        }
+
+        protected override void OnInitialized()
+        {
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -334,6 +340,25 @@ namespace V8.Net
             for (var i = 0; i < callbackTypes.Length; i++)
                 if (_FunctionsByType[callbackTypes[i]] == objectID)
                     _FunctionsByType[callbackTypes[i]] = -1;
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Calls the V8 'Set()' function on the underlying native function template to set properties that will exist on all function objects created from this template.
+        /// </summary>
+        public void SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined)
+        {
+            try
+            {
+                if (name.IsNullOrWhiteSpace()) throw new ArgumentNullException("name (cannot be null, empty, or only whitespace)");
+
+                V8NetProxy.SetFunctionTemplateProperty(_NativeFunctionTemplateProxy, name, value, attributes);
+            }
+            finally
+            {
+                value._DisposeIfFirst();
+            }
         }
 
         // --------------------------------------------------------------------------------------------------------------------

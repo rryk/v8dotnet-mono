@@ -255,35 +255,32 @@ namespace V8.Net
 
         public static implicit operator bool(Handle handle)
         {
-            return (bool)Types.ChangeType(handle.Value, typeof(bool));
+            return (bool)handle._Handle;
         }
 
         public static implicit operator Int32(Handle handle)
         {
-            return (Int32)Types.ChangeType(handle.Value, typeof(Int32));
+            return (Int32)handle._Handle;
         }
 
         public static implicit operator double(Handle handle)
         {
-            return (double)Types.ChangeType(handle.Value, typeof(double));
+            return (double)handle._Handle;
         }
 
         public static implicit operator string(Handle handle)
         {
-            var val = handle.Value;
-            if (val == null) return "";
-            return (string)Types.ChangeType(val, typeof(string));
+            return (string)handle._Handle;
         }
 
         public static implicit operator DateTime(Handle handle)
         {
-            var ms = (double)Types.ChangeType(handle.Value, typeof(double));
-            return new DateTime(1970, 1, 1) + TimeSpan.FromMilliseconds(ms);
+            return (DateTime)handle._Handle;
         }
 
         public static implicit operator JSProperty(Handle handle)
         {
-            return new JSProperty(handle);
+            return (JSProperty)handle._Handle;
         }
 
         // --------------------------------------------------------------------------------------------------------------------
@@ -345,47 +342,36 @@ namespace V8.Net
         }
 
         /// <summary>
-        /// (This is no longer valid - please refactor to use 'Object' instead.  The name 'ManagedObject' might make one think it returns V8ManagedObject, which is not true)
-        /// </summary>
-        [Obsolete("This is no longer valid - please refactor to use 'Object' instead.  The name 'ManagedObject' might make one think it returns V8ManagedObject, which is not true.", true)]
-        public object ManagedObject { get { throw new NotImplementedException("Obsolete."); } } // TODO: Remove.
-
-        /// <summary>
         /// A reference to the managed object associated with this handle. This property is only valid for object handles, and will return null otherwise.
         /// Upon reading this property, if the managed object has been garbage collected (because no more handles or references exist), then a new basic 'V8NativeObject' instance will be created.
         /// <para>Instead of checking for 'null' (which may not work as expected), query 'HasManagedObject' instead.</para>
         /// </summary>
-        public V8NativeObject Object
-        {
-            get
-            {
-                return _Handle.Object;
-            }
-        }
+        public V8NativeObject Object { get { return _Handle.Object; } }
 
         /// <summary>
-        /// (This is no longer valid - please refactor to use 'HasObject' instead.  The name 'ManagedObject' might make one think it relates to V8ManagedObject, which is not true)
+        /// If this handle represents an object instance binder, then this returns the bound object.
+        /// Bound objects are usually custom user objects (non-V8.NET objects) wrapped in ObjectBinder instances.
         /// </summary>
-        [Obsolete("This is no longer valid - please refactor to use 'HasObject' instead.  The name 'ManagedObject' might make one think it relates to V8ManagedObject, which is not true.", true)]
-        public bool? HasManagedObject { get { throw new NotImplementedException("Obsolete."); } } // TODO: Remove.
+        public object BoundObject { get { return _Handle.BoundObject; } }
+
+        /// <summary>
+        /// If this handle represents a type binder, then this returns the associated 'TypeBinder' instance.
+        /// <para>Bound types are usually non-V8.NET types that are wrapped and exposed in the JavaScript environment for use with the 'new' operator.</para>
+        /// </summary>
+        public TypeBinder TypeBinder { get { return _Handle.TypeBinder; } }
 
         /// <summary>
         /// Returns true if this handle is associated with a managed object.
         /// <para>Note: This can be false even though 'IsObjectType' may be true.
         /// A handle can represent a native V8 object handle without requiring an associated managed object.</para>
         /// </summary>
-        public bool HasObject
-        {
-            get
-            {
-                return _Handle.HasObject;
-            }
-        }
+        public bool HasObject { get { return _Handle.HasObject; } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// Reading from this property causes a native call to fetch the current V8 value associated with this handle.
+        /// <param>For objects, this returns the in-script type text as a string - unless this handle represents an object binder, in which case this will return the bound object instead.</param>
         /// </summary>
         public object Value { get { return _Handle.Value; } }
 
@@ -406,29 +392,38 @@ namespace V8.Net
         /// <summary>
         /// Returns true if this handle is associated with a managed object that has no other references and is ready to be disposed.
         /// </summary>
-        internal bool _IsWeakManagedObject { get { return _Handle._IsWeakManagedObject; } }
+        public bool IsWeakManagedObject { get { return _Handle.IsWeakManagedObject; } }
 
         /// <summary>
         /// Returns true if the handle is weak and ready to be disposed.
         /// </summary>
-        internal bool _IsWeakHandle { get { return _Handle._IsWeakHandle; } }
+        public bool IsWeakHandle { get { return _Handle.IsWeakHandle; } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// True if this handle is ready to be disposed (cached) on the native side.
         /// </summary>
-        internal bool _IsInPendingDisposalQueue
+        public bool IsInPendingDisposalQueue
         {
-            get { return _Handle._IsInPendingDisposalQueue; }
-            set { _Handle._IsInPendingDisposalQueue = value; }
+            get { return _Handle.IsInPendingDisposalQueue; }
+            internal set { _Handle.IsInPendingDisposalQueue = value; }
+        }
+
+        /// <summary>
+        /// True if this handle was made weak on the native side (for object handles only).  Once a handle is weak, the V8 garbage collector can collect the
+        /// handle (and any associated managed object) at any time.
+        /// </summary>
+        public bool IsNativelyWeak
+        {
+            get { return _Handle.IsNativelyWeak; }
         }
 
         /// <summary>
         /// Returns true if this handle is weak AND is associated with a weak managed object reference.
         /// When a handle is ready to be disposed, then calling "Dispose()" will succeed and cause the handle to be placed back into the cache on the native side.
         /// </summary>
-        internal bool _IsDisposeReady { get { return _Handle._IsDisposeReady; } }
+        public bool IsDisposeReady { get { return _Handle.IsDisposeReady; } }
 
         /// <summary>
         /// Attempts to dispose of this handle (add it back into the native proxy cache for reuse).  If the handle represents a managed object,
@@ -447,17 +442,23 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
+        /// Returns true if this handle is empty (that is, equal to 'Handle.Empty'), and false if a valid handle exists.
+        /// <para>An empty state is when a handle is set to 'Handle.Empty' and has no valid native V8 handle assigned.
+        /// This is similar to "undefined"; however, this property will be true if a valid native V8 handle exists that is set to "undefined".</para>
+        /// </summary>
+        public bool IsEmpty { get { return _Handle.IsEmpty; } }
+
+        /// <summary>
         /// Returns true if this handle is undefined or empty (empty is when this handle is an instance of 'Handle.Empty').
         /// <para>"Undefined" does not mean "null".  A variable (handle) can be defined and set to "null".</para>
         /// </summary>
         public bool IsUndefined { get { return _Handle.IsUndefined; } }
 
         /// <summary>
-        /// Returns true if this handle is empty (that is, equal to 'Handle.Empty'), and false if a valid handle exists.
-        /// <para>An empty state is when a handle is set to 'Handle.Empty' and has no valid native V8 handle assigned.
-        /// This is similar to "undefined"; however, this property will be true if a valid native V8 handle exists that is set to "undefined".</para>
+        /// Returns 'true' if this handle represents a 'null' value (that is, an explicitly defined 'null' value).
+        /// This will return 'false' if 'IsEmpty' or 'IsUndefined' is true.
         /// </summary>
-        public bool IsEmpty { get { return _Handle.IsEmpty; } }
+        public bool IsNull { get { return _Handle.IsNull; } }
 
         public bool IsBoolean { get { return _Handle.IsBoolean; } }
         public bool IsBooleanObject { get { return _Handle.IsBooleanObject; } }
@@ -476,6 +477,16 @@ namespace V8.Net
         /// Returns true of the handle represents ANY object type.
         /// </summary>
         public bool IsObjectType { get { return _Handle.IsObjectType; } }
+
+        /// <summary>
+        /// Used internally to quickly determine when an instance represents a binder object type (faster than reflection!).
+        /// </summary>
+        public bool IsBinder { get { return _Handle.IsBinder; } }
+
+        /// <summary>
+        /// Returns the binding mode (Instance, Static, or None) represented by this handle.  The return is 'None' (0) if not applicable.
+        /// </summary>
+        public BindingMode BindingMode { get { return _Handle.BindingMode; } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -586,7 +597,7 @@ namespace V8.Net
 
     public interface IV8Object
     {
-        bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None);
+        bool SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined);
 
         /// <summary>
         /// Calls the V8 'Set()' function on the underlying native object.
@@ -601,19 +612,20 @@ namespace V8.Net
         /// </summary>
         /// <param name="name">The property name.</param>
         /// <param name="obj">Some value or object instance. 'Engine.CreateValue()' will be used to convert value types.</param>
+        /// <param name="className">A custom in-script function name for the specified object type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
         /// <param name="recursive">For object types, if true, then nested objects are included, otherwise only the object itself is bound and returned.</param>
-        /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        bool SetProperty(string name, object obj, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None);
+        /// <param name="memberAttributes">Default flags that describe JavaScript properties for all members that don't have any 'ScriptMember' attribute.  They must be 'OR'd together as needed.</param>
+        bool SetProperty(string name, object obj, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None);
 
         /// <summary>
         /// Binds a 'V8Function' object to the specified type and associates the type name (or custom script name) with the underlying object.
         /// Returns true if successful.
         /// </summary>
         /// <param name="type">The type to wrap.</param>
-        /// <param name="customScriptName">A custom type name, or 'null' to use the type name as is (the default).</param>
+        /// <param name="className">A custom in-script function name for the specified type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
         /// <param name="recursive">If true, then nested objects are wrapped as properties are accessed, otherwise only the object itself is bound when created.</param>
-        /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        bool SetProperty(Type type, string customScriptName = null, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None);
+        /// <param name="memberAttributes">Default flags that describe JavaScript properties for all members that don't have any 'ScriptMember' attribute.  They must be 'OR'd together as needed.</param>
+        bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None);
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -651,6 +663,7 @@ namespace V8.Net
         void SetAccessor(string name,
             V8NativeObjectPropertyGetter getter, V8NativeObjectPropertySetter setter,
             V8PropertyAttributes attributes = V8PropertyAttributes.None, V8AccessControl access = V8AccessControl.Default);
+
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
@@ -686,6 +699,8 @@ namespace V8.Net
         /// If the function name is null or empty, then the current object is assumed to be a function object.
         /// </summary>
         InternalHandle Call(string functionName, params InternalHandle[] args);
+
+        // --------------------------------------------------------------------------------------------------------------------
     }
 
     // ========================================================================================================================
@@ -744,13 +759,14 @@ namespace V8.Net
         /// </summary>
         /// <param name="name">The property name.</param>
         /// <param name="obj">Some value or object instance. 'Engine.CreateValue()' will be used to convert value types.</param>
-        /// <param name="recursive">For object types, if true, then nested objects are included, otherwise only the object itself is bound and returned.
-        /// For security reasons, public members that point to object types will be ignored. This must be true to included those as well, effectively causing
-        /// the whole object tree to be traversed (so make sure this doesn't expose sensitive methods/properties/fields).</param>
+        /// <param name="className">A custom type name, or 'null' to use either the type name as is (the default), or any existing 'ScriptObject' attribute name.</param>
+        /// <param name="recursive">For object instances, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
         /// <param name="memberAttributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(string name, object obj, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None)
+        public bool SetProperty(string name, object obj, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.Undefined)
         {
-            return _Handle.SetProperty(name, obj, recursive, memberAttributes);
+            return _Handle.SetProperty(name, obj, className, recursive, memberAttributes);
         }
 
         /// <summary>
@@ -759,9 +775,11 @@ namespace V8.Net
         /// </summary>
         /// <param name="type">The type to wrap.</param>
         /// <param name="className">A custom type name, or 'null' to use either the type name as is (the default), or any existing 'ScriptObject' attribute name.</param>
-        /// <param name="recursive">If true, then nested objects are wrapped as properties are accessed, otherwise only the object itself is bound when created.</param>
+        /// <param name="recursive">For object types, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
         /// <param name="memberAttributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None)
+        public bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.Undefined)
         {
             return _Handle.SetProperty(type, className, recursive, memberAttributes);
         }
@@ -879,6 +897,16 @@ namespace V8.Net
 
 #endif
         // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The prototype of the object (every JavaScript object implicitly has a prototype).
+        /// </summary>
+        public ObjectHandle Prototype
+        {
+            get { return _Handle.Prototype; }
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
     }
 
     // ========================================================================================================================
@@ -936,7 +964,7 @@ namespace V8.Net
             var isHandle = (value.RuntimeType == typeof(InternalHandle) || typeof(Handle).IsAssignableFrom(value.RuntimeType));
             var isV8NativeObject = typeof(V8NativeObject).IsAssignableFrom(value.RuntimeType);
 
-            Expression[] args = new Expression[isHandle || isV8NativeObject ? 3 : 4];
+            Expression[] args = new Expression[isHandle || isV8NativeObject ? 3 : 5];
             MethodInfo methodInfo;
 
             args[0] = Expression.Constant(binder.Name);
@@ -955,9 +983,10 @@ namespace V8.Net
             else
             {
                 args[1] = Expression.Convert(value.Expression, typeof(object));
-                args[2] = Expression.Constant(true);
-                args[3] = Expression.Constant(V8PropertyAttributes.None);
-                methodInfo = ((Func<string, object, bool, V8PropertyAttributes, bool>)_Handle.SetProperty).Method;
+                args[2] = Expression.Constant(null, typeof(string));
+                args[3] = Expression.Constant(true);
+                args[4] = Expression.Constant(V8PropertyAttributes.None);
+                methodInfo = ((Func<string, object, string, bool, V8PropertyAttributes, bool>)_Handle.SetProperty).Method;
             }
 
             Expression self = Expression.Convert(Expression, LimitType);

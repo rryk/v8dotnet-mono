@@ -116,8 +116,8 @@ namespace V8.Net
         {
             if (value is bool) return (bool)value;
             string txt = ND(value, "").ToLower(); // (convert to string and test for 'true' state equivalent)
-            if (txt == "true" || txt == "yes" || txt == "y" || txt == "1" || txt == "ok" || txt == "pass") return true;
-            if (txt == "false" || txt == "no" || txt == "n" || txt == "0" || txt == "cancel" || txt == "fail") return false;
+            if (txt == "true" || txt == "t" || txt == "yes" || txt == "y" || txt == "1" || txt == "ok" || txt == "pass") return true;
+            if (txt == "false" || txt == "f" || txt == "no" || txt == "n" || txt == "0" || txt == "cancel" || txt == "fail") return false;
             return defaultValue;
         }
         public static Int16? ToInt16(object value, Int16? defaultValue)
@@ -261,36 +261,54 @@ namespace V8.Net
             if (targetType == null)
                 throw new ArgumentNullException("targetType");
 
-            if (value != null && value.GetType() == targetType) return value; // (same type as target!)
+            if (value == DBNull.Value) value = null;
+
+            var valueType = value != null ? value.GetType() : typeof(object);
+
+            if (valueType == targetType || targetType.IsAssignableFrom(valueType)) return value; // (same type as target! [or at least compatible])
 
             if (provider == null) provider = Thread.CurrentThread.CurrentCulture;
 
-            var underlyingType = Nullable.GetUnderlyingType(targetType);
+            var targetUnderlyingType = Nullable.GetUnderlyingType(targetType);
 
-            if (underlyingType != null)
+            if (targetUnderlyingType != null)
             {
+                if (value == null) return value;
                 // ... this is a nullable type target, so need to convert to underlying type first, then to a nullable type ...
-                value = ChangeType(value, underlyingType, provider); // (recursive call to convert to the underlying nullable type)
+                value = ChangeType(value, targetUnderlyingType, provider); // (recursive call to convert to the underlying nullable type)
                 return Activator.CreateInstance(targetType, value);
             }
-            else if (targetType.IsValueType && (value == null || value is string && string.IsNullOrEmpty((string)value)))
-            {
-                // (cannot set values to 'null')
-                if (targetType == typeof(bool))
-                    value = false;
-                else if (targetType == typeof(DateTime))
-                    value = DateTime.MinValue;
-                else
-                    value = 0;
-            }
-            else if (value == null) return null;
+            else if (targetType == typeof(string)) return value != null ? value.ToString() : "";
             else if (targetType == typeof(Boolean))
             {
                 if (value == null || value is string && ((string)value).IsNullOrWhiteSpace()) // (null or empty strings will be treated as 'false', but explicit text will try to be converted)
                     value = false;
+                else if (Utilities.IsNumeric(valueType))
+                    value = Convert.ToDouble(value) != 0; // (assume any value other than 0 is true)
                 else if ((value = Utilities.ToBoolean(value, null)) == null)
-                    throw new InvalidCastException(string.Format("Types.ChangeType(): Cannot convert string value \"{0}\" to a boolean.", value));
+                    throw new InvalidCastException(string.Format("Types.ChangeType(): Cannot convert string value \"{0}\" to a Boolean.", value));
+                return value; // (this has the correct type already, so just return now)
             }
+            else if (targetType.IsValueType && targetType.IsPrimitive)
+            {
+                if (value == null || value is string && ((string)value).IsNullOrWhiteSpace())
+                {
+                    // ... cannot set values to 'null' or empty strings, so translate this to a value type before conversion ...
+                    if (targetType == typeof(bool))
+                        value = false;
+                    else if (targetType == typeof(DateTime))
+                        value = DateTime.MinValue;
+                    else
+                        value = 0;
+                }
+                else if (value is string)
+                {
+                    // ... a value type is expected, but 'value' is a string, so try converting the string to a number value first in preparation ...
+                    double d;
+                    if (double.TryParse((string)value, System.Globalization.NumberStyles.Any, provider, out d)) value = d;
+                }
+            }
+            else if (value == null) return null;
 
             try
             {

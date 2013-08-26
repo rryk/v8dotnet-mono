@@ -15,10 +15,10 @@ namespace V8.Net
         public static string GetFullErrorMessage(this Exception ex, bool includeStackTrace = true) { return _GetFullErrorMessage(ex, "", includeStackTrace); }
         static string _GetFullErrorMessage(this Exception ex, string margin, bool includeStackTrace = true)
         {
-            string msg = margin + "=> Message: " + ex.Message + "\r\n\r\n" + margin;
+            string msg = margin + "=> Message: " + ex.Message + Environment.NewLine + Environment.NewLine + margin;
             if (includeStackTrace) msg += "=> Stack Trace: " + ex.StackTrace;
             if (ex.InnerException != null)
-                msg += "\r\n\r\n***Inner Exception ***\r\n" + _GetFullErrorMessage(ex.InnerException, margin + "==");
+                msg += Environment.NewLine + Environment.NewLine + "***Inner Exception ***" + Environment.NewLine + _GetFullErrorMessage(ex.InnerException, margin + "==");
             return msg;
         }
     }

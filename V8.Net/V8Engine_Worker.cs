@@ -34,7 +34,7 @@ namespace V8.Net
         {
             _Worker = new Thread(_WorkerLoop) { IsBackground = true }; // (note: must set 'IsBackground=true', else the app will hang on exit)
             _Worker.Priority = ThreadPriority.Lowest;
-            //_Worker.Start();
+            _Worker.Start();
         }
 
         // --------------------------------------------------------------------------------------------------------------------

@@ -87,6 +87,8 @@ namespace V8.Net
         {
         }
 
+        protected abstract void OnInitialized();
+
         // --------------------------------------------------------------------------------------------------------------------
 
         protected HandleProxy* _NamedPropertyGetter(string propertyName, ref ManagedAccessorInfo info)
@@ -235,6 +237,12 @@ namespace V8.Net
 
             if (registerPropertyInterceptors)
                 RegisterPropertyInterceptors();
+
+            OnInitialized();
+        }
+
+        protected override void OnInitialized()
+        {
         }
 
         ~ObjectTemplate()
@@ -251,6 +259,8 @@ namespace V8.Net
         {
             if (_NativeObjectTemplateProxy != null)
             {
+                _Engine._ClearAccessors(_NativeObjectTemplateProxy->ObjectID);
+
                 V8NetProxy.DeleteObjectTemplateProxy(_NativeObjectTemplateProxy); // (delete the corresponding native object as well; WARNING: This is done on the GC thread!)
                 _NativeObjectTemplateProxy = null;
             }
@@ -347,6 +357,67 @@ namespace V8.Net
         /// </summary>
         public V8ManagedObject CreateObject() { return CreateObject<V8ManagedObject>(); }
 
-        // ========================================================================================================================
+        // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Calls the V8 'Set()' function on the underlying native object template to set properties that will exist on all objects created from this template.
+        /// </summary>
+        public void SetProperty(string name, InternalHandle value, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+        {
+            try
+            {
+                if (name.IsNullOrWhiteSpace()) throw new ArgumentNullException("name (cannot be null, empty, or only whitespace)");
+
+                V8NetProxy.SetObjectTemplateProperty(_NativeObjectTemplateProxy, name, value, attributes);
+            }
+            finally
+            {
+                value._DisposeIfFirst();
+            }
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Calls the V8 'SetAccessor()' function on the underlying native 'v8::ObjectTenplate' instance to create a property that is controlled by "getter" and "setter" callbacks.
+        /// <para>Note: This is template related, which means all objects created from this template will be affected by these special properties.</para>
+        /// </summary>
+        public void SetAccessor(string name,
+            V8NativeObjectPropertyGetter getter, V8NativeObjectPropertySetter setter,
+            V8PropertyAttributes attributes = V8PropertyAttributes.None, V8AccessControl access = V8AccessControl.Default)
+        {
+            if (name.IsNullOrWhiteSpace()) throw new ArgumentNullException("name (cannot be null, empty, or only whitespace)");
+
+            var engine = Engine;
+
+            V8NetProxy.SetObjectTemplateAccessor(_NativeObjectTemplateProxy, -1, name,
+                   _Engine._StoreAccessor<ManagedAccessorGetter>(_NativeObjectTemplateProxy->ObjectID, "get_" + name, (HandleProxy* _this, string propertyName) =>
+                   {
+                       try
+                       {
+                           using (InternalHandle hThis = _this) { return getter != null ? getter(hThis, propertyName) : null; }
+                       }
+                       catch (Exception ex)
+                       {
+                           return engine.CreateError(Exceptions.GetFullErrorMessage(ex), JSValueType.ExecutionError);
+                       }
+                   }),
+                   _Engine._StoreAccessor<ManagedAccessorSetter>(_NativeObjectTemplateProxy->ObjectID, "set_" + name, (HandleProxy* _this, string propertyName, HandleProxy* value) =>
+                   {
+                       try
+                       {
+                           using (InternalHandle hThis = _this) { return setter != null ? setter(hThis, propertyName, value) : null; }
+                       }
+                       catch (Exception ex)
+                       {
+                           return engine.CreateError(Exceptions.GetFullErrorMessage(ex), JSValueType.ExecutionError);
+                       }
+                   }),
+                   access, attributes);
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
     }
+
+    // ========================================================================================================================
 }

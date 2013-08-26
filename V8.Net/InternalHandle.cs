@@ -155,10 +155,10 @@ namespace V8.Net
         {
             if (_HandleProxy != null && _HandleProxy->ManagedReferenceCount > 0)
             {
-                if (_HandleProxy->ManagedReferenceCount == 1 && _HandleProxy->_ManagedObjectID >= 0 && !_IsInPendingDisposalQueue)
+                if (_HandleProxy->ManagedReferenceCount == 1 && _HandleProxy->_ObjectID >= 0 && !IsInPendingDisposalQueue)
                 {
                     // (if this handle directly references a managed object, then notify the object info that it is weak if the ref count is 1)
-                    var weakRef = Engine._GetObjectWeakReference(_HandleProxy->_ManagedObjectID);
+                    var weakRef = Engine._GetObjectWeakReference(_HandleProxy->_ObjectID);
                     if (weakRef != null && weakRef.Object != null)
                         weakRef.Object._TryDisposeNativeHandle();
                 }
@@ -247,9 +247,7 @@ namespace V8.Net
 
         public static implicit operator string(InternalHandle handle)
         {
-            var val = handle.Value;
-            if (val == null) return "";
-            return (string)Types.ChangeType(val, typeof(string));
+            return handle.ToString();
         }
 
         public static implicit operator DateTime(InternalHandle handle)
@@ -318,17 +316,17 @@ namespace V8.Net
         /// <summary>
         /// The ID of the managed object represented by this handle.
         /// This ID is expected when handles are passed to 'V8ManagedObject.GetObject()'.
-        /// If this value is less than 0 (usually -1), then there is no associated managed object.
+        /// If this value is less than 0, then there is no associated 'V8NativeObject' object (and the 'Object' property will be null).
         /// </summary>
         public Int32 ObjectID
         {
             get
             {
                 return _HandleProxy == null ? -1
-                    : _HandleProxy->_ManagedObjectID < -1 || _HandleProxy->_ManagedObjectID >= 0 ? _HandleProxy->_ManagedObjectID
-                    : V8NetProxy.GetHandleManagedObjectID(_HandleProxy);
+                    : _HandleProxy->_ObjectID < -1 || _HandleProxy->_ObjectID >= 0 ? _HandleProxy->_ObjectID
+                    : IsObjectType ? V8NetProxy.GetHandleManagedObjectID(_HandleProxy) : -1;
             }
-            internal set { if (_HandleProxy != null) _HandleProxy->_ManagedObjectID = value; }
+            internal set { if (_HandleProxy != null) _HandleProxy->_ObjectID = value; }
         }
 
         /// <summary>
@@ -336,15 +334,9 @@ namespace V8.Net
         /// </summary>
         internal Int32 _CurrentObjectID
         {
-            get { return _HandleProxy != null ? _HandleProxy->_ManagedObjectID : -1; }
-            set { if (_HandleProxy != null) _HandleProxy->_ManagedObjectID = value; }
+            get { return _HandleProxy != null ? _HandleProxy->_ObjectID : -1; }
+            set { if (_HandleProxy != null) _HandleProxy->_ObjectID = value; }
         }
-
-        /// <summary>
-        /// (This is no longer valid - please refactor to use 'Object' instead.  The name 'ManagedObject' might make one think it returns V8ManagedObject, which is not true)
-        /// </summary>
-        [Obsolete("This is no longer valid - please refactor to use 'Object' instead.  The name 'ManagedObject' might make one think it returns V8ManagedObject, which is not true.", true)]
-        public object ManagedObject { get { throw new NotImplementedException("Obsolete."); } } // TODO: Remove.
 
         /// <summary>
         /// A reference to the managed object associated with this handle. This property is only valid for object handles, and will return null otherwise.
@@ -355,9 +347,9 @@ namespace V8.Net
         {
             get
             {
-                if (_HandleProxy->_ManagedObjectID >= 0 || _HandleProxy->_ManagedObjectID == -1 && HasObject)
+                if (_HandleProxy->_ObjectID >= 0 || _HandleProxy->_ObjectID == -1 && HasObject)
                 {
-                    var weakRef = Engine._GetObjectWeakReference(_HandleProxy->_ManagedObjectID);
+                    var weakRef = Engine._GetObjectWeakReference(_HandleProxy->_ObjectID);
                     return weakRef != null ? weakRef.Reset() : null;
                 }
                 else
@@ -366,10 +358,23 @@ namespace V8.Net
         }
 
         /// <summary>
-        /// (This is no longer valid - please refactor to use 'HasObject' instead.  The name 'ManagedObject' might make one think it relates to V8ManagedObject, which is not true)
+        /// If this handle represents an object instance binder, then this returns the bound object.
+        /// Bound objects are usually custom user objects (non-V8.NET objects) wrapped in ObjectBinder instances.
         /// </summary>
-        [Obsolete("This is no longer valid - please refactor to use 'HasObject' instead.  The name 'ManagedObject' might make one think it relates to V8ManagedObject, which is not true.", true)]
-        public bool? HasManagedObject { get { throw new NotImplementedException("Obsolete."); } } // TODO: Remove.
+        public object BoundObject { get { return BindingMode == BindingMode.Instance ? ((ObjectBinder)Object).Object : null; } }
+
+        /// <summary>
+        /// If this handle represents a type binder, then this returns the associated 'TypeBinder' instance.
+        /// <para>Bound types are usually non-V8.NET types that are wrapped and exposed in the JavaScript environment for use with the 'new' operator.</para>
+        /// </summary>
+        public TypeBinder TypeBinder
+        {
+            get
+            {
+                return BindingMode == BindingMode.Static ? ((TypeBinderFunction)Object).TypeBinder
+                    : BindingMode == BindingMode.Instance ? ((ObjectBinder)Object).TypeBinder : null;
+            }
+        }
 
         /// <summary>
         /// Returns true if this handle is associated with a managed object.
@@ -380,7 +385,7 @@ namespace V8.Net
         {
             get
             {
-                if (_HandleProxy->_ManagedObjectID >= -1 && IsObjectType && ObjectID >= 0)
+                if (_HandleProxy->_ObjectID >= -1 && IsObjectType && ObjectID >= 0)
                 {
                     var weakRef = Engine._GetObjectWeakReference(_CurrentObjectID);
                     return weakRef != null && weakRef.Object != null;
@@ -393,8 +398,29 @@ namespace V8.Net
 
         /// <summary>
         /// Reading from this property causes a native call to fetch the current V8 value associated with this handle.
+        /// <param>For objects, this returns the in-script type text as a string - unless this handle represents an object binder, in which case this will return the bound object instead.</param>
         /// </summary>
-        public object Value { get { if (_HandleProxy != null) { V8NetProxy.UpdateHandleValue(_HandleProxy); return _HandleProxy->Value; } else return null; } }
+        public object Value
+        {
+            get
+            {
+                if (IsBinder)
+                    return BoundObject;
+                else if (IsObjectType)
+                {
+                    var typeInfo = new TypeBinder.TypeInfo(this);
+                    if (typeInfo.IsSourceFromTypeInfo)
+                        return typeInfo.ValueOrDefault; // (this object represents a TypeInfo object, so return its value)
+                }
+
+                if (_HandleProxy != null)
+                {
+                    V8NetProxy.UpdateHandleValue(_HandleProxy);
+                    return _HandleProxy->Value;
+                }
+                else return null;
+            }
+        }
 
         /// <summary>
         /// Once "Value" is accessed to retrieve the JavaScript value in real time, there's no need to keep accessing it.  Just call this property
@@ -419,7 +445,7 @@ namespace V8.Net
         /// <summary>
         /// Returns true if this handle is associated with a managed object that has no other references and is ready to be disposed.
         /// </summary>
-        internal bool _IsWeakManagedObject
+        public bool IsWeakManagedObject
         {
             get
             {
@@ -443,24 +469,33 @@ namespace V8.Net
         /// <summary>
         /// Returns true if the handle is weak and ready to be disposed.
         /// </summary>
-        internal bool _IsWeakHandle { get { return _HandleProxy != null && _HandleProxy->ManagedReferenceCount <= 1; } }
+        public bool IsWeakHandle { get { return _HandleProxy != null && _HandleProxy->ManagedReferenceCount <= 1; } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
         /// True if this handle is ready to be disposed (cached) on the native side.
         /// </summary>
-        internal bool _IsInPendingDisposalQueue
+        public bool IsInPendingDisposalQueue
         {
             get { return _HandleProxy != null && _HandleProxy->IsDisposeReady; }
-            set { if (_HandleProxy != null) _HandleProxy->IsDisposeReady = value; }
+            internal set { if (_HandleProxy != null) _HandleProxy->IsDisposeReady = value; }
+        }
+
+        /// <summary>
+        /// True if this handle was made weak on the native side (for object handles only).  Once a handle is weak, the V8 garbage collector can collect the
+        /// handle (and any associated managed object) at any time.
+        /// </summary>
+        public bool IsNativelyWeak
+        {
+            get { return _HandleProxy != null && _HandleProxy->IsWeak; }
         }
 
         /// <summary>
         /// Returns true if this handle is weak AND is associated with a weak managed object reference.
         /// When a handle is ready to be disposed, then calling "Dispose()" will succeed and cause the handle to be placed back into the cache on the native side.
         /// </summary>
-        internal bool _IsDisposeReady { get { return _IsWeakHandle && _IsWeakManagedObject; } }
+        public bool IsDisposeReady { get { return IsWeakHandle && IsWeakManagedObject; } }
 
         /// <summary>
         /// Attempts to dispose of this handle (add it back into the native proxy cache for reuse).  If the handle represents a managed object with strong
@@ -470,7 +505,7 @@ namespace V8.Net
         /// </summary>
         internal bool __TryDispose()
         {
-            if (_IsDisposeReady)
+            if (IsDisposeReady)
             {
                 _HandleProxy->IsDisposeReady = true;
                 _CompleteDisposal(); // (no need to wait! there's no managed object.)
@@ -502,17 +537,23 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
+        /// Returns true if this handle is empty (that is, equal to 'Handle.Empty'), and false if a valid handle exists.
+        /// <para>An empty state is when a handle is set to 'InternalHandle.Empty' and has no valid native V8 handle assigned.
+        /// This is similar to "undefined"; however, this property will be true if a valid native V8 handle exists that is set to "undefined".</para>
+        /// </summary>
+        public bool IsEmpty { get { return _HandleProxy == null; } }
+
+        /// <summary>
         /// Returns true if this handle is undefined or empty (empty is when this handle is an instance of 'Handle.Empty').
         /// <para>"Undefined" does not mean "null".  A variable (handle) can be defined and set to "null".</para>
         /// </summary>
         public bool IsUndefined { get { return IsEmpty || ValueType == JSValueType.Undefined; } }
 
         /// <summary>
-        /// Returns true if this handle is empty (that is, equal to 'Handle.Empty'), and false if a valid handle exists.
-        /// <para>An empty state is when a handle is set to 'Handle.Empty' and has no valid native V8 handle assigned.
-        /// This is similar to "undefined"; however, this property will be true if a valid native V8 handle exists that is set to "undefined".</para>
+        /// Returns 'true' if this handle represents a ''ull' value (that is, an explicitly defined 'null' value).
+        /// This will return 'false' if 'IsEmpty' or 'IsUndefined' is true.
         /// </summary>
-        public bool IsEmpty { get { return _HandleProxy == null; } }
+        public bool IsNull { get { return ValueType == JSValueType.Null; } }
 
         public bool IsBoolean { get { return ValueType == JSValueType.Bool; } }
         public bool IsBooleanObject { get { return ValueType == JSValueType.BoolObject; } }
@@ -544,6 +585,16 @@ namespace V8.Net
                     || ValueType == JSValueType.Object;
             }
         }
+
+        /// <summary>
+        /// Used internally to quickly determine when an instance represents a binder object type (faster than reflection!).
+        /// </summary>
+        public bool IsBinder { get { return IsObjectType && HasObject && Object._BindingMode != BindingMode.None; } }
+
+        /// <summary>
+        /// Returns the binding mode (Instance, Static, or None) represented by this handle.  The return is 'None' (0) if not applicable.
+        /// </summary>
+        public BindingMode BindingMode { get { return IsBinder ? Object._BindingMode : BindingMode.None; } }
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -597,25 +648,56 @@ namespace V8.Net
 
         public override string ToString()
         {
-            if (IsUndefined) return "undefined";
-
-            if (IsObjectType)
+            try
             {
-                string managedType = "";
-                string disposal = _HandleProxy->Disposed == 0 ? "" : _HandleProxy->Disposed == 1 ? " - Pending Disposal" : _HandleProxy->Disposed == 2 ? " - Disposed" : "";
+                if (IsUndefined) return "undefined";
 
-                if (HasObject)
+                if (IsBinder)
                 {
-                    var mo = Engine._GetObjectAsIs(ObjectID);
-                    managedType = " (" + (mo != null ? mo.GetType().Name + " [" + mo.ID + "]" : "associated managed object is null") + ")";
+                    if (BindingMode == BindingMode.Static)
+                    {
+                        var typeBinder = ((TypeBinderFunction)Object).TypeBinder;
+                        return "(CLR Type: " + typeBinder.BoundType.FullName + ")";
+                    }
+                    else
+                    {
+                        var obj = BoundObject;
+                        if (obj != null)
+                            return "(" + obj.ToString() + ")";
+                        else
+                            throw new InvalidOperationException("Object binder does not have an object instance.");
+                    }
+                }
+                else if (IsObjectType)
+                {
+                    string managedType = "";
+                    string disposal = "";
+
+                    switch (_HandleProxy->Disposed)
+                    {
+                        case 0: break;
+                        case 1: disposal = " - Dispose Ready"; break;
+                        case 2: disposal = " - Weak (waiting on V8 GC)"; break;
+                        case 3: disposal = " - Disposed"; break;
+                    }
+
+                    if (HasObject)
+                    {
+                        var mo = Engine._GetObjectAsIs(ObjectID);
+                        managedType = " (" + (mo != null ? mo.GetType().Name + " [" + mo.ID + "]" : "associated managed object is null") + ")";
+                    }
+
+                    return "<object: " + Enum.GetName(typeof(JSValueType), ValueType) + managedType + disposal + ">";
                 }
 
-                return "<object: " + Enum.GetName(typeof(JSValueType), ValueType) + managedType + disposal + ">";
+                var val = Value;
+
+                return val != null ? (string)Types.ChangeType(val, typeof(string)) : "null";
             }
-
-            var val = Value;
-
-            return val != null ? val.ToString() : "null";
+            catch (Exception ex)
+            {
+                return Exceptions.GetFullErrorMessage(ex);
+            }
         }
 
         /// <summary>
@@ -777,9 +859,13 @@ namespace V8.Net
         /// </summary>
         /// <param name="name">The property name.</param>
         /// <param name="obj">Some value or object instance. 'Engine.CreateValue()' will be used to convert value types.</param>
-        /// <param name="recursive">For object types, if true, then nested objects are included, otherwise only the object itself is bound and returned.</param>
-        /// <param name="memberAttributes">Default flags that describe JavaScript properties for all members that don't have any 'ScriptMember' attribute.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(string name, object obj, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None)
+        /// <param name="className">A custom in-script function name for the specified object type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
+        /// <param name="recursive">For object instances, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
+        /// <param name="memberAttributes">For object instances, these are default flags that describe JavaScript properties for all object instance members that
+        /// don't have any 'ScriptMember' attribute.  The flags should be 'OR'd together as needed.</param>
+        public bool SetProperty(string name, object obj, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.Undefined)
         {
             if (!IsObjectType) throw new InvalidOperationException(_NOT_AN_OBJECT_ERRORMSG);
 
@@ -789,7 +875,7 @@ namespace V8.Net
             if (obj == null || obj is string || obj.GetType().IsValueType) // TODO: Check enum support.
                 return SetProperty(name, Engine.CreateValue(obj), memberAttributes);
 
-            var nObj = Engine.CreateBinding(obj, recursive, memberAttributes);
+            var nObj = Engine.CreateBinding(obj, className, recursive, memberAttributes);
             return SetProperty(name, nObj, memberAttributes);
         }
 
@@ -798,14 +884,17 @@ namespace V8.Net
         /// Returns true if successful.
         /// </summary>
         /// <param name="type">The type to wrap.</param>
-        /// <param name="className">A custom type name, or 'null' to use either the type name as is (the default), or any existing 'ScriptObject' attribute name.</param>
-        /// <param name="recursive">If true, then nested objects are wrapped as properties are accessed, otherwise only the object itself is bound when created.</param>
-        /// <param name="memberAttributes">Default flags that describe JavaScript properties for all members that don't have any 'ScriptMember' attribute.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.None)
+        /// <param name="className">A custom in-script function name for the specified type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
+        /// <param name="recursive">For object types, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
+        /// <param name="memberAttributes">For object instances, these are default flags that describe JavaScript properties for all object instance members that
+        /// don't have any 'ScriptMember' attribute.  The flags should be 'OR'd together as needed.</param>
+        public bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes memberAttributes = V8PropertyAttributes.Undefined)
         {
             if (!IsObjectType) throw new InvalidOperationException(_NOT_AN_OBJECT_ERRORMSG);
 
-            var func = Engine.CreateBinding(type, className, recursive, memberAttributes);
+            var func = (V8Function)Engine.CreateBinding(type, className, recursive, memberAttributes).Object;
             return SetProperty(func.FunctionTemplate.ClassName, func, memberAttributes);
         }
 
@@ -876,8 +965,8 @@ namespace V8.Net
 
             var engine = Engine;
 
-            V8NetProxy.SetObjectAccessor(this, ID, name,
-                   Engine._StoreAccessor<ManagedAccessorGetter>(this, "get_" + name, (HandleProxy* _this, string propertyName) =>
+            V8NetProxy.SetObjectAccessor(this, ObjectID, name,
+                   Engine._StoreAccessor<ManagedAccessorGetter>(ObjectID, "get_" + name, (HandleProxy* _this, string propertyName) =>
                    {
                        try
                        {
@@ -888,7 +977,7 @@ namespace V8.Net
                            return engine.CreateError(Exceptions.GetFullErrorMessage(ex), JSValueType.ExecutionError);
                        }
                    }),
-                   Engine._StoreAccessor<ManagedAccessorSetter>(this, "set_" + name, (HandleProxy* _this, string propertyName, HandleProxy* value) =>
+                   Engine._StoreAccessor<ManagedAccessorSetter>(ObjectID, "set_" + name, (HandleProxy* _this, string propertyName, HandleProxy* value) =>
                    {
                        try
                        {
@@ -1015,6 +1104,20 @@ namespace V8.Net
         }
 
         // --------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The prototype of the object (every JavaScript object implicitly has a prototype).
+        /// </summary>
+        public InternalHandle Prototype
+        {
+            get
+            {
+                if (!IsObjectType) throw new InvalidOperationException(_NOT_AN_OBJECT_ERRORMSG);
+                return V8NetProxy.GetObjectPrototype(_HandleProxy);
+            }
+        }
+
+        // --------------------------------------------------------------------------------------------------------------------
     }
 
     // ========================================================================================================================
@@ -1035,20 +1138,20 @@ namespace V8.Net
 
     public unsafe partial class V8Engine
     {
-        internal readonly Dictionary<InternalHandle, Dictionary<string, Delegate>> _Accessors = new Dictionary<InternalHandle, Dictionary<string, Delegate>>();
+        internal readonly Dictionary<Int32, Dictionary<string, Delegate>> _Accessors = new Dictionary<Int32, Dictionary<string, Delegate>>();
 
         /// <summary>
-        /// This is required in order prevent accessor delegates from getting garbage collected when used with "thunking" (via P/Invokes).
+        /// This is required in order prevent accessor delegates from getting garbage collected when used with P/Invoke related callbacks (a process called "thunking").
         /// </summary>
         /// <typeparam name="T">The type of delegate ('d') to store and return.</typeparam>
-        /// <param name="obj">Any object instance to associated the delegate to.</param>
+        /// <param name="key">A native pointer (usually a proxy object) to associated the delegate to.</param>
         /// <param name="d">The delegate to keep a strong reference to (expected to be of type 'T').</param>
         /// <returns>The same delegate passed in, cast to type of 'T'.</returns>
-        internal T _StoreAccessor<T>(InternalHandle handle, string propertyName, T d) where T : class
+        internal T _StoreAccessor<T>(Int32 id, string propertyName, T d) where T : class
         {
             Dictionary<string, Delegate> delegates;
-            if (!_Accessors.TryGetValue(handle, out delegates))
-                _Accessors[handle] = delegates = new Dictionary<string, Delegate>();
+            if (!_Accessors.TryGetValue(id, out delegates))
+                _Accessors[id] = delegates = new Dictionary<string, Delegate>();
             delegates[propertyName] = (Delegate)(object)d;
             return d;
         }
@@ -1056,19 +1159,19 @@ namespace V8.Net
         /// <summary>
         /// Returns true if there are any delegates associated with the given object reference.
         /// </summary>
-        internal bool _HasAccessors(InternalHandle handle)
+        internal bool _HasAccessors(Int32 id)
         {
             Dictionary<string, Delegate> delegates;
-            return _Accessors.TryGetValue(handle, out delegates) && delegates.Count > 0;
+            return _Accessors.TryGetValue(id, out delegates) && delegates.Count > 0;
         }
 
         /// <summary>
         /// Clears any accessor delegates associated with the given object reference.
         /// </summary>
-        internal void _ClearAccessors(InternalHandle handle)
+        internal void _ClearAccessors(Int32 id)
         {
             Dictionary<string, Delegate> delegates;
-            if (_Accessors.TryGetValue(handle, out delegates))
+            if (_Accessors.TryGetValue(id, out delegates))
                 delegates.Clear();
         }
     }

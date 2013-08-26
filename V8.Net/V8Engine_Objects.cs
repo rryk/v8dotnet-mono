@@ -49,36 +49,6 @@ namespace V8.Net
         // --------------------------------------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Returns true if the managed garbage collector is ready to collect the specified object (since no other CLR references exist).
-        /// <para>Note: This is only for testing/debugging purposes.  As well, this call is only valid immediately after the last object reference is cleared,
-        /// but before the next call to create a new object.</para>
-        /// </summary>
-        public bool IsObjectWeak(int objID)
-        {
-            var weakRef = _GetObjectWeakReference(objID);
-
-            if (weakRef == null)
-                throw new InvalidOperationException("The specified object with ID '" + objID + "' was not found.");
-
-            return weakRef.IsGCReady;
-        }
-
-        /// <summary>
-        /// Returns true if the managed garbage collector is ready to collect the handle for the specified object (since no other CLR references exist).
-        /// </summary>
-        public bool IsHandleWeak(int handleID)
-        {
-            InternalHandle handle = _HandleProxies[handleID];
-
-            if (handle.IsEmpty)
-                throw new InvalidOperationException("The specified handle with ID '" + handleID + "' was not found.");
-
-            return handle._IsWeakHandle;
-        }
-
-        // --------------------------------------------------------------------------------------------------------------------
-
-        /// <summary>
         /// Creates an uninitialized managed object ONLY (does not attempt to associate it with a JavaScript object, regardless of the supplied handle).
         /// <para>Warning: The managed wrapper is not yet initialized.  When returning the new managed object to the user, make sure to call
         /// '_ObjectInfo.Initialize()' first. Note however that new objects should only be initialized AFTER setup is completed so the users

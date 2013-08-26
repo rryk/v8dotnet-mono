@@ -122,7 +122,7 @@ namespace V8.Net
                 if (_Prototype == null && _Handle.IsObjectType)
                 {
                     // ... the prototype is not yet set, so get the prototype and wrap it ...
-                    _Prototype = V8NetProxy.GetObjectPrototype(_Handle);
+                    _Prototype = _Handle.Prototype;
                 }
 
                 return _Prototype;
@@ -134,6 +134,12 @@ namespace V8.Net
         /// Returns true if this object is ready to be garbage collected by the native side.
         /// </summary>
         public bool IsManagedObjectWeak { get { lock (Engine._Objects) { return _ID != null ? Engine._Objects[_ID.Value].IsGCReady : true; } } }
+
+        /// <summary>
+        /// Used internally to quickly determine when an instance represents a binder object type, or static type binder function (faster than reflection!).
+        /// </summary>
+        public BindingMode BindingType { get { return _BindingMode; } }
+        internal BindingMode _BindingMode;
 
         // --------------------------------------------------------------------------------------------------------------------
 
@@ -202,7 +208,7 @@ namespace V8.Net
                     // (the native GC has not reported we can remove this yet, so just flag the collection attempt [note: if 'Engine._Objects[_ID.Value].CanCollect' is true here, then finalize will succeed])
                 }
 
-            if (_Handle._IsWeakHandle) // (a handle is weak when there is only one reference [itself], which means this object is ready for the worker)
+            if (_Handle.IsWeakHandle) // (a handle is weak when there is only one reference [itself], which means this object is ready for the worker)
                 _TryDisposeNativeHandle();
         }
 
@@ -227,19 +233,20 @@ namespace V8.Net
         /// </summary>
         internal void _TryDisposeNativeHandle()
         {
-            if (IsManagedObjectWeak && (_Handle.IsEmpty || _Handle._IsWeakHandle && !_Handle._IsInPendingDisposalQueue))
+            if (IsManagedObjectWeak && (_Handle.IsEmpty || _Handle.IsWeakHandle && !_Handle.IsInPendingDisposalQueue))
             {
-                _Handle._IsInPendingDisposalQueue = true; // (this also helps to make sure this method isn't called again)
+                _Handle.IsInPendingDisposalQueue = true; // (this also helps to make sure this method isn't called again)
 
-                if ((Template == null || !(this is V8ManagedObject) && !(this is V8Function)) && !Engine._HasAccessors(_Handle)) // ('V8NativeObject' type objects don't have callbacks, but they might have accessors!)
+                /*//??if ((Template == null || !(this is V8ManagedObject) && !(this is V8Function)) && !Engine._HasAccessors(_ID.Value)) // ('V8NativeObject' type objects don't have callbacks, but they might have accessors!)
                     _OnNativeGCRequested();
                 else if (Template is ObjectTemplate && !((ObjectTemplate)Template).PropertyInterceptorsRegistered) // (no callback will occur if there are no interceptors, so just delete the entry now)
                     _OnNativeGCRequested();
-                else if (_ID != null)
-                    lock (_Engine._WeakObjects)
-                    {
-                        _Engine._WeakObjects.Add(_ID.Value); // (queue on the worker to set a native weak reference to dispose of this object later when the native GC is ready)
-                    }
+                else*/
+
+                lock (_Engine._WeakObjects)
+                {
+                    _Engine._WeakObjects.Add(_ID.Value); // (queue on the worker to set a native weak reference to dispose of this object later when the native GC is ready)
+                }
             }
         }
 
@@ -266,7 +273,7 @@ namespace V8.Net
 
                 _Handle.Dispose(); // (note: this may already be disposed, in which case this call does nothing)
 
-                Engine._ClearAccessors(_Handle); // (just to be sure - accessors are no longer needed once the native handle is GC'd)
+                Engine._ClearAccessors(_ID.Value); // (just to be sure - accessors are no longer needed once the native handle is GC'd)
 
                 Template = null;
 
@@ -329,11 +336,14 @@ namespace V8.Net
         /// </summary>
         /// <param name="name">The property name.</param>
         /// <param name="obj">Some value or object instance. 'Engine.CreateValue()' will be used to convert value types.</param>
-        /// <param name="recursive">For object types, if true, then nested objects are included, otherwise only the object itself is bound and returned.</param>
+        /// <param name="className">A custom in-script function name for the specified object type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
+        /// <param name="recursive">For object instances, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
         /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(string name, object obj, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+        public bool SetProperty(string name, object obj, string className = null, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined)
         {
-            return _Handle._Handle.SetProperty(name, obj, recursive, attributes);
+            return _Handle._Handle.SetProperty(name, obj, className, recursive, attributes);
         }
 
         /// <summary>
@@ -341,12 +351,14 @@ namespace V8.Net
         /// Returns true if successful.
         /// </summary>
         /// <param name="type">The type to wrap.</param>
-        /// <param name="customScriptName">A custom type name, or 'null' to use the type name as is (the default).</param>
-        /// <param name="recursive">If true, then nested objects are wrapped as properties are accessed, otherwise only the object itself is bound when created.</param>
+        /// <param name="className">A custom in-script function name for the specified type, or 'null' to use either the type name as is (the default) or any existing 'ScriptObject' attribute name.</param>
+        /// <param name="recursive">For object types, if true, then object reference members are included, otherwise only the object itself is bound and returned.
+        /// For security reasons, public members that point to object instances will be ignored. This must be true to included those as well, effectively allowing
+        /// in-script traversal of the object reference tree (so make sure this doesn't expose sensitive methods/properties/fields).</param>
         /// <param name="attributes">Flags that describe JavaScript properties.  They must be 'OR'd together as needed.</param>
-        public bool SetProperty(Type type, string customScriptName = null, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.None)
+        public bool SetProperty(Type type, string className = null, bool recursive = false, V8PropertyAttributes attributes = V8PropertyAttributes.Undefined)
         {
-            return _Handle._Handle.SetProperty(type, customScriptName, recursive, attributes);
+            return _Handle._Handle.SetProperty(type, className, recursive, attributes);
         }
 
         // --------------------------------------------------------------------------------------------------------------------
