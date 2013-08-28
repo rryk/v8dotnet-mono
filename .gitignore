@@ -1,0 +1,8 @@
+V8.NET-Proxy/V8/build
+bin
+obj
+obj_3.5
+*.log
+*.opensdf
+*.sdf
+*.suo
